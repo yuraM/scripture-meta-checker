@@ -1,0 +1,173 @@
+"""HTML reports: index.html (one line per check) and one page per check, for reading in any browser.
+
+Layout of the report folder: index.html, html/<check>.html, txt/<check>.txt (the text reports, written by cli).
+
+The pages are static files (no server, no internet): styles and scripts are inline, the problems of a check
+are embedded as JSON and shown in pages of PAGE_SIZE blocks, with a search box and an errors-only filter.
+"""
+from __future__ import annotations
+
+import html
+import json
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+
+PAGE_SIZE = 200  # blocks shown at once; large reports (60 000 blocks) would make the browser slow
+HTML_FOLDER = "html"
+TXT_FOLDER = "txt"
+
+
+@dataclass
+class Problem:
+    severity: str  # "error" / "warning"
+    message: str
+    count: int
+    context: str
+    where: str
+
+
+@dataclass
+class CheckResult:
+    name: str
+    description: str
+    errors: int = 0
+    warnings: int = 0
+    skipped: str = ""  # reason if the check could not run
+    problems: list[Problem] = field(default_factory=list)
+    note: str = ""  # what the check did not list and why
+
+
+STYLE = """
+:root{--bg:#f7f8f6;--card:#fff;--fg:#1c2421;--muted:#5d6a64;--line:#dbe1dc;--accent:#2f6b55;
+--err:#b3261e;--err-bg:#fbeae8;--warn:#875a00;--warn-bg:#fdf4de;--ok:#2f6b55}
+@media (prefers-color-scheme:dark){:root{--bg:#141917;--card:#1c2320;--fg:#e3eae5;--muted:#9aa8a0;
+--line:#2e3833;--accent:#7cc5a6;--err:#ff8a80;--err-bg:#3a1f1d;--warn:#f0c062;--warn-bg:#352c15;--ok:#7cc5a6}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 "Segoe UI",system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:1.6rem;margin:0 0 4px}
+a{color:var(--accent)}
+.muted{color:var(--muted)}
+.desc{max-width:75ch}
+table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line);
+font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
+td.n,th.n{text-align:right}
+.e{color:var(--err);font-weight:600}.w{color:var(--warn);font-weight:600}.z{color:var(--muted)}
+.tools{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:16px 0}
+input[type=search]{flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--line);border-radius:4px;
+background:var(--card);color:var(--fg);font:inherit}
+.block{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:4px;
+padding:10px 14px;margin:0 0 10px}
+.block.error{border-left-color:var(--err)}
+.block h3{margin:0 0 4px;font-size:1rem;font-weight:600;overflow-wrap:anywhere}
+.block .row{font-size:.92rem;overflow-wrap:anywhere}
+.block .label{display:inline-block;min-width:4.5em;color:var(--muted)}
+.text{font-family:Consolas,monospace;background:var(--bg);padding:1px 4px;border-radius:3px}
+button{font:inherit;padding:6px 14px;border:1px solid var(--line);border-radius:4px;background:var(--card);
+color:var(--fg);cursor:pointer}
+.scroll{overflow-x:auto}
+"""
+
+SCRIPT = """
+const data = JSON.parse(document.getElementById('data').textContent);
+const list = document.getElementById('list'), more = document.getElementById('more'),
+      info = document.getElementById('info'), search = document.getElementById('search'),
+      errorsOnly = document.getElementById('errors-only');
+let shown = 0, matches = [];
+function esc(s){return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function block(p, i){
+  const rows = [];
+  if (p.count > 1) rows.push(`<div class="row"><span class="label">Found:</span> ${p.count} times</div>`);
+  if (p.context) rows.push(`<div class="row"><span class="label">Text:</span> <span class="text">${esc(p.context)}</span></div>`);
+  rows.push(`<div class="row"><span class="label">Where:</span> ${esc(p.where)}</div>`);
+  return `<div class="block ${p.severity}"><h3>${i + 1}. ${esc(p.message)}</h3>${rows.join('')}</div>`;
+}
+function render(){
+  const q = search.value.trim().toLowerCase();
+  matches = data.map((p, i) => [p, i]).filter(([p]) =>
+    (!errorsOnly.checked || p.severity === 'error') &&
+    (!q || (p.message + ' ' + p.context + ' ' + p.where).toLowerCase().includes(q)));
+  list.innerHTML = ''; shown = 0; showMore();
+}
+function showMore(){
+  const next = matches.slice(shown, shown + PAGE);
+  list.insertAdjacentHTML('beforeend', next.map(([p, i]) => block(p, i)).join(''));
+  shown += next.length;
+  info.textContent = `Showing ${shown} of ${matches.length} problems`;
+  more.hidden = shown >= matches.length;
+}
+search.addEventListener('input', render); errorsOnly.addEventListener('change', render);
+more.addEventListener('click', showMore);
+render();
+"""
+
+
+def _page(title: str, body: str) -> str:
+    return (f"<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+            f"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+            f"<title>{html.escape(title)}</title>\n<style>{STYLE}</style>\n</head>\n<body>\n<main>\n{body}\n"
+            f"</main>\n</body>\n</html>\n")
+
+
+def _counts(result: CheckResult) -> str:
+    if result.skipped:
+        return '<td class="n z" colspan="3">not checked</td>'
+    errors = f'<span class="e">{result.errors}</span>' if result.errors else '<span class="z">0</span>'
+    warnings = f'<span class="w">{result.warnings}</span>' if result.warnings else '<span class="z">0</span>'
+    return f'<td class="n">{errors}</td><td class="n">{warnings}</td><td class="n">{len(result.problems)}</td>'
+
+
+def write_index(report_dir: Path, project: str, results: list[CheckResult], location_help: str) -> Path:
+    rows = "\n".join(
+        f'<tr><td><a href="{HTML_FOLDER}/{html.escape(r.name)}.html">{html.escape(r.name)}</a></td>{_counts(r)}'
+        f'<td><a class="muted" href="{TXT_FOLDER}/{html.escape(r.name)}.txt">txt</a></td></tr>'
+        for r in results)
+    errors = sum(r.errors for r in results)
+    warnings = sum(r.warnings for r in results)
+    body = (f"<h1>{html.escape(project)}</h1>\n"
+            f"<p class=\"muted\">Checked {datetime.now():%Y-%m-%d %H:%M}. "
+            f"Errors: {errors}, warnings: {warnings}. Click a check to see its problems.</p>\n"
+            f"<p><a href=\"{TXT_FOLDER}/\">Open the folder of text reports (txt)</a> "
+            f"<span class=\"muted\">&middot; <a class=\"muted\" href=\"{HTML_FOLDER}/\">html</a></span></p>\n"
+            f"<p class=\"muted desc\">{html.escape(location_help)}</p>\n"
+            "<div class=\"scroll\"><table>\n<thead><tr><th>Check</th><th class=\"n\">Errors</th>"
+            "<th class=\"n\">Warnings</th><th class=\"n\">Different problems</th><th></th></tr></thead>\n"
+            f"<tbody>\n{rows}\n</tbody>\n</table></div>")
+    path = report_dir / "index.html"
+    path.write_text(_page(f"{project} checks", body), encoding="utf-8")
+    return path
+
+
+def write_check_page(report_dir: Path, project: str, result: CheckResult, location_help: str) -> Path:
+    txt = f"../{TXT_FOLDER}/{html.escape(result.name)}.txt"
+    header = (f"<p><a href=\"../index.html\">&larr; All checks of {html.escape(project)}</a> "
+              f"<span class=\"muted\">&middot; <a class=\"muted\" href=\"{txt}\">txt</a></span></p>\n"
+              f"<h1>{html.escape(result.name)}</h1>\n<p class=\"desc\">{html.escape(result.description)}</p>\n")
+    if result.skipped:
+        body = header + f"<p class=\"muted\">{html.escape(result.skipped)}</p>"
+    else:
+        data = json.dumps([p.__dict__ for p in result.problems], ensure_ascii=False).replace("</", "<\\/")
+        body = (header
+                + f"<p>Errors: <span class=\"e\">{result.errors}</span>, warnings: "
+                  f"<span class=\"w\">{result.warnings}</span>. "
+                  f"<span class=\"muted\">{html.escape(location_help)}</span></p>\n"
+                + (f"<p class=\"desc\">{html.escape(result.note)}</p>\n" if result.note else "")
+                + "<div class=\"tools\"><input type=\"search\" id=\"search\" placeholder=\"Search in this report\">"
+                  "<label><input type=\"checkbox\" id=\"errors-only\"> Errors only</label>"
+                  "<span class=\"muted\" id=\"info\"></span></div>\n"
+                  "<div id=\"list\"></div>\n<button id=\"more\" type=\"button\" hidden>Show more</button>\n"
+                  f"<script type=\"application/json\" id=\"data\">{data}</script>\n"
+                  f"<script>const PAGE = {PAGE_SIZE};{SCRIPT}</script>")
+    path = report_dir / HTML_FOLDER / f"{result.name}.html"
+    path.write_text(_page(f"{result.name} - {project}", body), encoding="utf-8")
+    return path
+
+
+def write_html_report(report_dir: Path, project: str, results: list[CheckResult], location_help: str) -> Path:
+    """Write index.html and one page per check; returns the path of index.html."""
+    (report_dir / HTML_FOLDER).mkdir(parents=True, exist_ok=True)
+    for result in results:
+        write_check_page(report_dir, project, result, location_help)
+    return write_index(report_dir, project, results, location_help)

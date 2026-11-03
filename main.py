@@ -1,0 +1,79 @@
+"""Run the Paratext project checker.
+
+Edit the settings below and run this file (Shift+F10 in PyCharm).
+Command line arguments, if given, override these settings: `python main.py --help`.
+"""
+import sys
+from pathlib import Path
+
+from checker.cli import main
+
+# ---------------------------------------------------------------- settings ---
+
+# Paratext project folder (Settings.xml, SpellingStatus.xml, hyphenatedWords.txt, *.SFM): put your folder here.
+# For everyday use the window (checker_app.py / checker.exe) is easier: it lists the Paratext projects.
+PROJECT = Path(__file__).parent / "MyProject"
+
+# Comment out the checks you do not need.1
+CHECKS = [
+    "characters",            # ValidCharacters / InvalidCharacters
+    "punctuation",           # ValidPunctuation / InvalidPunctuation
+    "mixed-capitalization",  # mixed-case words approved in SpellingStatus.xml
+    "capitalization",        # capital after sentence end, abbreviations
+    "spelling",              # SpellingStatus.xml
+    "quotes",                # quotation marks: unclosed, wrong level, mismatched
+    "pairs",                 # Pairs: ( ) [ ] { } unclosed or mismatched
+    "repeated-words",        # "і і"; RepeatableWords / NonRepeatableWords
+    "spacing",               # double spaces, thousands separator in numbers
+    "scripts",               # words mixing scripts (Latin "c" in a Cyrillic word)
+    "normalization",         # NormalizationForm (NFC)
+    "paragraph-final",       # last punctuation of a paragraph; headings ending with "."
+    "ordinals",              # NumberOrdinals: "5-го", "8th", "ke-430"
+    "usfm",                  # unclosed markers and notes, chapter/verse numbering, empty verses, \fr vs verse
+    "book-titles",           # \toc1 = \mt2 + \mt1, \toc2 = \h
+    "hyphenation",           # hyphenatedWords.txt: rules, consistency, missing words
+    "lists",                 # contradictions between SpellingStatus, Settings and hyphenation lists
+    "approvals",             # approved list entries that look wrong; rejected ones used very often
+    "variants",              # rare names one letter away from a frequent one (Петор / Петро)
+    "name-case",             # word usually capitalized mid-sentence but not here (or the reverse)
+    "styled-words",          # word usually in \nd but not here (or the reverse)
+    "references",            # references: chapters/verses that do not exist, marks not from Settings.xml
+    "parallel-changes",      # ParallelPassageStatus.xml: approved parallel verses that were changed later
+    "parallel-differences",  # ParallelPassageStatus.xml: parallel verses that differ in a few words
+    "terms",                 # Biblical Terms: rendering missing in a verse (clear cases only), unused renderings
+    "term-lists",            # Biblical Terms: old 'OK without a rendering' marks, guessed renderings
+    "unused",                # list entries that never occur in the text (large report)
+]
+
+# Only these books, e.g. ["GEN", "MAT"]; None = all books.
+BOOKS = None
+
+# Language profile for language-specific rules, e.g. "uk"; None = LanguageIsoCode from Settings.xml.
+LANGUAGE = None
+
+# Folder for the reports: one file per check (<project>_report/spelling.txt, ...); None = print to the console.
+REPORT_DIR = PROJECT.parent / f"{PROJECT.name}_report"
+
+UNIQUE = True        # each distinct problem once, with its count and first location
+ERRORS_ONLY = False  # hide warnings
+
+# -----------------------------------------------------------------------------
+
+
+def settings_to_args() -> list[str]:
+    args = [str(PROJECT), "--checks", *CHECKS]
+    if BOOKS:
+        args += ["--books", *BOOKS]
+    if LANGUAGE:
+        args += ["--language", LANGUAGE]
+    if REPORT_DIR:
+        args += ["--report-dir", str(REPORT_DIR)]
+    if UNIQUE:
+        args.append("--unique")
+    if ERRORS_ONLY:
+        args.append("--errors-only")
+    return args
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:] or settings_to_args()))

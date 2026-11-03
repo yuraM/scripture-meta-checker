@@ -1,0 +1,18 @@
+# Only the checker itself is kept in git: everything in the root is ignored unless listed below.
+# Paratext project folders (Scripture text under copyright, notes of people), their reports, the virtualenv
+# and build output stay local.
+/*
+!/.gitignore
+!/CLAUDE.md
+!/main.py
+!/checker_app.py
+!/build_exe.bat
+!/Open Book Icon.png
+!/checker/
+!/tests/
+!/.claude/
+/.claude/*
+!/.claude/commands/
+
+__pycache__/
+*.pyc
