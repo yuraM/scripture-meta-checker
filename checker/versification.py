@@ -1,8 +1,9 @@
 """Verse numbers in another versification: Paratext .vrs mappings.
 
 A .vrs line "PSA 51:1-19 = PSA 51:3-21" says: verse 51:1 of this versification is verse 51:3 of the Original
-versification (org.vrs), and so on. The English versification (eng.vrs, from Paratext / SIL libpalaso, MIT license)
-is kept next to this module, because Paratext keeps it inside the program. A project may change it with its own
+versification (org.vrs), and so on. The English versification (eng.vrs, the same file as examples/eng.vrs of
+github.com/ubsicap/versification_json, MIT license: eng.vrs.LICENSE) is kept next to this module, because Paratext
+keeps it inside the program. A project may change it with its own
 custom.vrs (same syntax); a custom line replaces the lines of eng.vrs about the same verses.
 """
 from __future__ import annotations

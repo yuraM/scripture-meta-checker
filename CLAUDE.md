@@ -126,6 +126,7 @@ wordlist/
 │   ├── terms.py         # Biblical Terms (terms list + TermRenderings.xml): terms, term-lists
 │   ├── versification.py # .vrs mappings: Original verse numbers -> English (eng.vrs + custom.vrs of the project)
 │   ├── eng.vrs          # Paratext English versification (data; Paratext keeps it inside the program)
+│   ├── eng.vrs.LICENSE  # MIT license of eng.vrs (UBS ICAP)
 │   ├── structure.py     # USFM structure: markers, notes, chapter/verse numbers (raw file)
 │   ├── places.py        # names of Paratext windows/menus used in report texts
 │   ├── approvals.py     # approvals check: approved list entries that look wrong
@@ -342,7 +343,8 @@ Notes on `terms` / `term-lists` (`checker/terms.py`, added 2026-11-03):
   TermRenderings.xml or a list: "not checked". So in the exe the Major list needs Paratext on that computer.
 - Verse numbers (`checker/versification.py`, added 2026-11-03): program lists have no `<Versification>` and count
   verses as Original; a project list says it (`English-…`, `Original-…`). Original -> English uses `checker/eng.vrs`
-  (Paratext's English versification, MIT, from SIL libpalaso; kept in the package because Paratext has it inside the
+  (Paratext's English versification; the same file is published by UBS ICAP, github.com/ubsicap/versification_json,
+  MIT, license in `checker/eng.vrs.LICENSE`, also bundled; kept in the package because Paratext has it inside the
   program, bundled into the exe by build_exe.bat) plus the project's `custom.vrs`, whose lines replace eng.vrs lines
   about the same verse on either side. Other pairs of versifications: "not checked". Denials are in the project
   numbering (measured: hindi 40 vs 4, ptm 110 vs 4). Verse 1 is searched together with the `\d` title (verse 0):
