@@ -434,7 +434,7 @@ base project is needed):
   scripture text (no notes, no headings) the `\nd` count and the words without `\nd` that are not written small.
   **More** `\nd` than the map is not reported: translations repeat the name where the base translation has "he"
   (`Abram believed the LORD, and he credited` vs `\nd Господь\nd* зарахував`): 33-323 verses per project, noise.
-- Measured on 10 projects with `\nd`: 270 findings, mostly real (`Herren sa`, `እግዚኣብሄር` without `\nd`; 216 before
+- Measured on 10 projects with `\nd`: 270 findings (280 with the OT share below), mostly real (`Herren sa`, `እግዚኣብሄር` without `\nd`; 216 before
   counts, +64 with counts, -10 with the Adonai rule, +titles). Known noise left:
   a paraphrase that says the verse differently (`Tuhan Allah` for "the Sovereign LORD" twice), a word for Adonai that
   the base translation renders otherwise. Projects without `\nd` give 0.
