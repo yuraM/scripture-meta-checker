@@ -1,6 +1,7 @@
 """Shared types: findings, analysed segments and the check context."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from checker.hyphenation import HyphenationList
@@ -74,6 +75,8 @@ class CheckContext:
         self.mixed_case_words: set[str] = set()  # words that spelling left to mixed-capitalization
         # ParallelPassageStatus.xml entries (checker.parallels.PassageStatus); None = the project has no such file.
         self.parallel_passages: list | None = None
+        # Verse of the project -> Original verse (its versification + custom.vrs); None = unknown versification.
+        self.to_original: Callable[[tuple[str, int, int]], tuple[str, int, int]] | None = None
         # Check name -> why it could not run (shown in its report).
         self.skipped: dict[str, str] = {}
         # Check name -> a note shown under its counts, e.g. what was not listed and why.

@@ -1017,9 +1017,19 @@ class DivineNameTest(unittest.TestCase):
         style_refs = {("nd", "господь"): (inside, [("GEN", "2:4"), ("GEN", "1:1"), ("GEN", "3:1")])}
         texts = {("GEN", 2, 4): "Господь Бог створив", ("GEN", 1, 1): "Господь створив",
                  ("GEN", 3, 1): "і господь його"}
-        found = list(check_divine_name(style_refs, texts, "4"))
+        found = list(check_divine_name(style_refs, texts, lambda verse: verse))
         # 1:1 is not a verse of the map; in 3:1 the word is written small (a man, not a name).
         self.assertEqual([f.ref for f in found], ["2:4"])
+
+    def test_project_versification_with_custom_vrs(self):
+        from checker.versification import project_to_original
+        with tempfile.TemporaryDirectory() as folder:
+            convert = project_to_original(Path(folder), "4")
+            self.assertEqual(convert(("PSA", 13, 6)), ("PSA", 13, 6))  # not 13:5, as English -> Original -> English
+            self.assertEqual(convert(("PSA", 3, 1)), ("PSA", 3, 2))    # eng.vrs: PSA 3:0-8 = PSA 3:1-9
+            (Path(folder) / "custom.vrs").write_text("ISA 64:1 = ISA 63:19\n", encoding="utf-8")
+            self.assertEqual(project_to_original(Path(folder), "")(("ISA", 64, 1)), ("ISA", 63, 19))
+            self.assertIsNone(project_to_original(Path(folder), "9"))
 
 
 class UpdateTest(unittest.TestCase):

@@ -11,6 +11,7 @@ the report send English verse numbers to Paratext.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 
@@ -93,7 +94,7 @@ def _original_to_english() -> dict[Verse, Verse]:
 
 def to_english(verse: Verse, versification: str) -> Verse | None:
     """The same verse in the English versification (through Original); None = unknown versification.
-    A project's custom.vrs is not used here."""
+    A project's custom.vrs is not used here (report links know only the project name); see project_to_english."""
     if versification == "4":
         return verse
     if versification != ORIGINAL:
@@ -101,3 +102,37 @@ def to_english(verse: Verse, versification: str) -> Verse | None:
             return None
         verse = _to_original(STANDARD_FILES[versification]).get(verse, verse)
     return _original_to_english().get(verse, verse)
+
+
+@lru_cache(maxsize=8)
+def _project_to_original(versification: str, custom_text: str) -> dict[Verse, Verse]:
+    """Verse of a project -> Original verse: its standard versification with the lines of its custom.vrs, which
+    replace the standard lines about the same verse on either side."""
+    pairs = []
+    if versification != ORIGINAL:
+        pairs = read_mappings(Path(__file__).with_name(STANDARD_FILES[versification]).read_text(encoding="utf-8-sig"))
+    custom = read_mappings(custom_text)
+    mine_changed = {mine for mine, _ in custom}
+    original_changed = {original for _, original in custom}
+    mapping: dict[Verse, Verse] = {}
+    for mine, original in custom + [(mine, original) for mine, original in pairs
+                                    if mine not in mine_changed and original not in original_changed]:
+        # A verse of text is verse 1, not the title ("PSA 113:9 = PSA 115:0" and "PSA 113:9-26 = PSA 115:1-18").
+        if mine not in mapping or (mapping[mine][2] == 0 and original[2] and mine[2]):
+            mapping[mine] = original
+    return mapping
+
+
+def project_to_original(project: Path, versification: str) -> Callable[[Verse], Verse] | None:
+    """A function: verse of the project -> the same verse in the Original versification, with the project's
+    custom.vrs (Settings.xml without <Versification> = "4", English). None = unknown versification.
+
+    Two projects are compared in Original numbers: going on to English is not exact, because eng.vrs has lines such
+    as "PSA 13:0-5 = PSA 13:1-6", which turn English 13:6 into 13:5 on the way back."""
+    versification = versification or "4"
+    if versification != ORIGINAL and versification not in STANDARD_FILES:
+        return None
+    custom_path = project / CUSTOM_VRS
+    custom_text = custom_path.read_text(encoding="utf-8-sig") if custom_path.is_file() else ""
+    to_original = _project_to_original(versification, custom_text)
+    return lambda verse: to_original.get(verse, verse)

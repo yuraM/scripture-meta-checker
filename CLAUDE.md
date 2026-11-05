@@ -147,7 +147,7 @@ wordlist/
 │   ├── approvals.py     # approvals check: approved list entries that look wrong
 │   ├── footnotes.py     # footnotes check: notes built differently from similar ones (raw \f … \f*)
 │   ├── divine_name.py   # divine-name check: the divine name without \nd in verses of nd_verses.txt
-│   ├── nd_verses.txt    # verses (English versification) where a base translation has LORD in \nd; numbers only
+│   ├── nd_verses.txt    # verses (Original numbers) where a base translation has LORD in \nd; numbers only
 │   ├── spaces.py        # special-spaces check: U+202F, \fv … \fv*, abbreviations with ~ (raw file)
 │   ├── html_report.py   # HTML report: index.html + one page per check (static, inline CSS/JS)
 │   ├── gui.py           # tkinter window: choose project and checks, run, open the report
@@ -409,15 +409,20 @@ Notes on `terms` / `term-lists` (`checker/terms.py`, added 2026-11-03):
 
 Notes on `divine-name` (`checker/divine_name.py`, added 2026-11-05, user request: keep the map in the program so no
 base project is needed):
-- `nd_verses.txt` = 5 859 verses (783 chapter lines `GEN 2:4-5,7-9`) where an English base translation has `\nd`
+- `nd_verses.txt` = 5 859 verses (785 chapter lines `GEN 2:4-5,7-9`) where an English base translation has `\nd`
   (scripture text only: no notes, no headings), made once from that project; it holds verse numbers only, no text.
-  Bundled into the exe by build_exe.bat.
-- A project verse goes to English with `versification.to_english` (custom.vrs is not used); Settings.xml without
-  `<Versification>` (daughter projects) = English; another value = "not checked".
+  Numbers are **Original** (the base translation's versification + its custom.vrs: `NEH 7:68`, `ISA 64:1` are numbered
+  differently there). Bundled into the exe by build_exe.bat.
+- A project verse goes to Original with `versification.project_to_original` (its versification + its custom.vrs, whose
+  lines replace the standard lines about the same verse; `ctx.to_original`, set in `cli.run_checks`). Settings.xml
+  without `<Versification>` (daughter projects) = English; another value = "not checked". Not English: going
+  English -> Original -> English is not exact (eng.vrs `PSA 13:0-5 = PSA 13:1-6` turns 13:6 into 13:5). custom.vrs
+  matters: one project says Original in Settings.xml but numbers like English through custom.vrs (2 false findings
+  without it). `to_english` (report links) still has no custom.vrs: a link knows only the project name.
 - The plain comparison "map has `\nd`, project verse has none" is mostly noise: the base translation writes "the LORD"
   where others write "he" (45 of 45 in one project, >1000 in a paraphrase). So only a word the project itself keeps in
   `\nd` (≥20×, ≥80%; from `UsageCounter.style_refs`) and writes not small (`tu señor` = a man) is reported.
-- Measured on 10 projects with `\nd`: 219 findings, mostly real (`Herren sa`, `እግዚኣብሄር` without `\nd`). Known noise:
+- Measured on 10 projects with `\nd`: 216 findings, mostly real (`Herren sa`, `እግዚኣብሄር` without `\nd`). Known noise:
   "Sovereign LORD" verses, where the word is the translation of Adonai (`Tuhan Allah`, `Soberano Senhor`), and verses
   with both LORD and Lord. Projects without `\nd` give 0.
 

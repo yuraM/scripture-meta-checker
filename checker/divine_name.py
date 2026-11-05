@@ -1,8 +1,9 @@
 """divine-name check: the divine name without \\nd in a verse where translations have it.
 
-`nd_verses.txt` (kept next to this module and bundled into the exe) lists the verses, in the English versification,
-where an English base translation marks the divine name (LORD) with \\nd: only verse numbers, no text. A project's
-verse is converted to English (versification.to_english) and looked up there.
+`nd_verses.txt` (kept next to this module and bundled into the exe) lists the verses where an English base translation
+marks the divine name (LORD) with \\nd: only verse numbers, no text, in the Original versification (the base
+translation's own custom.vrs applied). A project's verse is converted to Original with its versification and its
+custom.vrs (versification.project_to_original) and looked up there.
 
 Words of the project itself say which word is the divine name: a word in \\nd in at least MIN_INSIDE places and
 MIN_SHARE of its places. Such a word without \\nd in a listed verse that has no \\nd at all is reported. A verse
@@ -11,18 +12,17 @@ without such a word is not reported: translations often say "he" where the base 
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from functools import lru_cache
 from pathlib import Path
 
 from checker.model import CONTEXT_WIDTH, WARNING, Finding
 from checker.structure import verse_range
-from checker.versification import Verse, to_english
+from checker.versification import Verse
 
 ND_VERSES = Path(__file__).with_name("nd_verses.txt")
 MIN_INSIDE = 20   # the word is in \nd at least this often
 MIN_SHARE = 0.8   # and in at least this part of its places
-ENGLISH = "4"     # Settings.xml without <Versification>: Paratext uses English
 
 Location = tuple[str, str]  # (book, "chapter:verse")
 _LINE_RE = re.compile(r"([0-9A-Z]{3}) (\d+):([\d,-]+)$")
@@ -64,10 +64,10 @@ def _context(text: str, word: str) -> str | None:
 def check_divine_name(
     style_refs: dict[tuple[str, str], tuple[list[Location], list[Location]]],
     verse_texts: dict[Verse, str],
-    versification: str,
+    to_original: Callable[[Verse], Verse],
 ) -> Iterator[Finding]:
-    """`style_refs`: (marker, lowercase word) -> places inside / outside the style (UsageCounter.style_refs)."""
-    versification = versification or ENGLISH
+    """`style_refs`: (marker, lowercase word) -> places inside / outside the style (UsageCounter.style_refs);
+    `to_original`: verse of the project -> Original verse."""
     listed = nd_verses()
     with_nd = {location for (marker, _), (inside, _) in style_refs.items() if marker == "nd" for location in inside}
     for (marker, word), (inside, outside) in sorted(style_refs.items()):
@@ -78,7 +78,7 @@ def check_divine_name(
             if location in with_nd or location in reported:
                 continue
             verses = _verses(location)
-            if not any(to_english(verse, versification) in listed for verse in verses):
+            if not any(to_original(verse) in listed for verse in verses):
                 continue
             text = " ".join(verse_texts[verse] for verse in verses if verse in verse_texts)
             context = _context(text, word)

@@ -34,6 +34,7 @@ from checker.stages import STAGES, in_stage_order, stage_checks
 from checker.structure import book_name_words
 from checker.terms import load_terms
 from checker.usfm import parse_usfm
+from checker.versification import project_to_original
 
 ALL = "all"
 # Checks run by default; project checks only when named.
@@ -184,6 +185,7 @@ def run_checks(
         ctx.parallel_passages = load_parallel_status(parallel_path)
     if notes is not None:
         ctx.notes = notes
+    ctx.to_original = project_to_original(project, settings.versification)
     if any(name in TERM_CHECKS for name in checks):
         ctx.terms, ctx.terms_problem = load_terms(project, settings.biblical_terms_list, settings.versification)
     wanted = {code.upper() for code in books} if books else None
