@@ -1003,6 +1003,25 @@ class ParatextLinkTest(unittest.TestCase):
         self.assertIn('const LINK = {"protocol": "scripturechecker", "project": "Abc", "vrs": "4"}', text)
 
 
+class DivineNameTest(unittest.TestCase):
+    def test_map_is_bundled(self):
+        from checker.divine_name import nd_verses
+        verses = nd_verses()
+        self.assertIn(("GEN", 2, 4), verses)  # "the LORD God made the earth"
+        self.assertNotIn(("GEN", 1, 1), verses)  # "God created"
+        self.assertGreater(len(verses), 5000)
+
+    def test_word_usually_in_nd(self):
+        from checker.divine_name import check_divine_name
+        inside = [("GEN", f"{chapter}:1") for chapter in range(30, 55)]
+        style_refs = {("nd", "господь"): (inside, [("GEN", "2:4"), ("GEN", "1:1"), ("GEN", "3:1")])}
+        texts = {("GEN", 2, 4): "Господь Бог створив", ("GEN", 1, 1): "Господь створив",
+                 ("GEN", 3, 1): "і господь його"}
+        found = list(check_divine_name(style_refs, texts, "4"))
+        # 1:1 is not a verse of the map; in 3:1 the word is written small (a man, not a name).
+        self.assertEqual([f.ref for f in found], ["2:4"])
+
+
 class UpdateTest(unittest.TestCase):
     def test_versions(self):
         from checker.updates import is_newer

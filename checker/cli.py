@@ -93,6 +93,8 @@ CHECK_DESCRIPTIONS = {
                  "Often this is on purpose (God / god).",
     "styled-words": "A word is almost always inside a marker such as \\nd (or outside it), but here it is different. "
                     "Often this is on purpose.",
+    "divine-name": "The name of God (LORD) is not in \\nd in a verse where other translations have it in \\nd. "
+                   "The check looks only at words that this project puts in \\nd nearly always.",
     "references": "References must point to a book, chapter and verse that exist, and use the marks from Paratext: "
                   f"{places.REFERENCE_FORMAT}. Book names: {places.BOOK_NAMES} (\\toc1-3).",
     "footnotes": "Footnotes that are built differently from similar footnotes of this project. The start of a "

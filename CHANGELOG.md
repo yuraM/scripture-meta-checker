@@ -4,6 +4,13 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ## Unreleased
 
+### What's new
+
+- **divine-name** (stage 6, Review lists): finds the name of God (LORD) without `\nd` in verses where other
+  translations have it in `\nd`, for example `Herren sa` in a verse where every other `Herren` is in `\nd`. The list of
+  these verses is part of the program, so no other project is needed. Only words that the project itself nearly always
+  puts in `\nd` are checked.
+
 ### Fixed
 
 - **punctuation:** a mark of Scripture references (for example the range mark `–` in Project settings >

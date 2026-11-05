@@ -146,6 +146,8 @@ wordlist/
 │   ├── places.py        # names of Paratext windows/menus used in report texts
 │   ├── approvals.py     # approvals check: approved list entries that look wrong
 │   ├── footnotes.py     # footnotes check: notes built differently from similar ones (raw \f … \f*)
+│   ├── divine_name.py   # divine-name check: the divine name without \nd in verses of nd_verses.txt
+│   ├── nd_verses.txt    # verses (English versification) where a base translation has LORD in \nd; numbers only
 │   ├── spaces.py        # special-spaces check: U+202F, \fv … \fv*, abbreviations with ~ (raw file)
 │   ├── html_report.py   # HTML report: index.html + one page per check (static, inline CSS/JS)
 │   ├── gui.py           # tkinter window: choose project and checks, run, open the report
@@ -243,6 +245,7 @@ wordlist/
 | `ordinals` | NumberOrdinals, NumberOrdinalType, `\toc1-3` | — | number + affix not in NumberOrdinals (`8-ого`); uppercase affixes (`1Sa`), words of book names (`1ዜና`) and verse parts after a reference (`22:43б`) are skipped |
 | `name-case` (opt-in) | text frequencies | — | word capitalized mid-sentence in ≤5% of ≥10 occurrences (or lowercase in ≤5%); sentence starts, words after quotes/brackets, headings and all-caps words are not counted |
 | `styled-words` (opt-in) | text + `\nd` spans | — | word in `\nd` in ≤5% of ≥10 occurrences, or without `\nd` in ≤5%; notes are not counted |
+| `divine-name` (opt-in) | `checker/nd_verses.txt` + text `\nd` spans + versification | — | a word the project puts in `\nd` ≥20× and in ≥80% of its places is without `\nd` (and not written small) in a verse with no `\nd`, where the map says an English base translation has LORD in `\nd` |
 | `references` (opt-in) | `\xt`, `\fr`, `\xo` + `\toc1-3` of all books + ChapterVerseSeparator, RangeIndicator, SequenceIndicator, ChapterRangeSeparator, ChapterNumberSeparator, BookSequenceSeparator | `\xt` points to a chapter/verse that does not exist (every part, verses after the sequence mark, range ends, link targets); wrong mark in `\xt`/`\fr`/`\xo`; range that goes backwards | book name not found in any `\toc1-3`; link target book not in the project; text and link show different numbers (`8|JER 22:28`); non-ASCII letter in a link; number with no chapter after the chapter mark (`13፥2፤ 12`: verse or chapter? a person decides) |
 | `terms` (opt-in) | terms list (BiblicalTermsListSetting: project folder or Paratext program folder; ProjectBiblicalTerms.xml) + TermRenderings.xml + eng.vrs/custom.vrs | — | clear cases only: none of the renderings of a term is in a verse of the term, while the term is rendered in all other verses (missing in ≤2 verses and ≤5%); rendering found nowhere in the text (`cлов` with Latin `c`). The hidden rest is counted in the report note |
 | `term-lists` (opt-in) | the same files | — | verse marked OK without a rendering (Denial) where the rendering is there now, or which is not a verse of the term; rendering guessed by Paratext (only terms of the project list) |
@@ -277,7 +280,7 @@ book in order, because a quote may span paragraphs and chapters. Design:
 - Notes quote fragments of the text (`Or “I have been given … to`): no level check, all findings
   are warnings marked "(in a footnote)".
 
-`unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `numbers`, `footnotes`, `references`, `parallel-changes`,
+`unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `divine-name`, `numbers`, `footnotes`, `references`, `parallel-changes`,
 `parallel-differences`, `terms` and `term-lists` are project-level checks (`PROJECT_CHECKS`): they run once after
 all books, using `UsageCounter`. They are not in the default run (`unused` ≈22k findings,
 mostly SpellingStatus `R` words and hyphenation entries) and must be requested with
@@ -403,6 +406,20 @@ Notes on `terms` / `term-lists` (`checker/terms.py`, added 2026-11-03):
 - TermRenderings.xml also keeps terms of other lists (24k entries vs 8.9k terms, 291 guesses): only terms of the
   project list are checked, as Paratext shows only those.
 - `ctx.notes` (check -> text) is a general way to say what a check did not list; txt and HTML show it.
+
+Notes on `divine-name` (`checker/divine_name.py`, added 2026-11-05, user request: keep the map in the program so no
+base project is needed):
+- `nd_verses.txt` = 5 859 verses (783 chapter lines `GEN 2:4-5,7-9`) where an English base translation has `\nd`
+  (scripture text only: no notes, no headings), made once from that project; it holds verse numbers only, no text.
+  Bundled into the exe by build_exe.bat.
+- A project verse goes to English with `versification.to_english` (custom.vrs is not used); Settings.xml without
+  `<Versification>` (daughter projects) = English; another value = "not checked".
+- The plain comparison "map has `\nd`, project verse has none" is mostly noise: the base translation writes "the LORD"
+  where others write "he" (45 of 45 in one project, >1000 in a paraphrase). So only a word the project itself keeps in
+  `\nd` (≥20×, ≥80%; from `UsageCounter.style_refs`) and writes not small (`tu señor` = a man) is reported.
+- Measured on 10 projects with `\nd`: 219 findings, mostly real (`Herren sa`, `እግዚኣብሄር` without `\nd`). Known noise:
+  "Sovereign LORD" verses, where the word is the translation of Adonai (`Tuhan Allah`, `Soberano Senhor`), and verses
+  with both LORD and Lord. Projects without `\nd` give 0.
 
 Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, added 2026-11-02):
 - Source: the project's **own** `ParallelPassageStatus.xml` (Paratext parallel passages tool), never a shared list or

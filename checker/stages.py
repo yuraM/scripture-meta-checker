@@ -17,7 +17,7 @@ STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
      ("spelling", "mixed-capitalization", "capitalization", "repeated-words", "ordinals", "hyphenation")),
     ("Stage 5. References and terms",
      ("references", "footnotes", "terms", "parallel-changes", "parallel-differences")),
-    ("Stage 6. Review lists", ("variants", "name-case", "styled-words", "unused")),
+    ("Stage 6. Review lists", ("variants", "name-case", "styled-words", "divine-name", "unused")),
 )
 # Stages whose errors are named at the top of the report: fix them before the others.
 FIRST_STAGES = 2

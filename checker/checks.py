@@ -9,6 +9,7 @@ from functools import lru_cache
 
 from checker import places
 from checker.approvals import check_approvals
+from checker.divine_name import ENGLISH, check_divine_name
 from checker.footnotes import Note, check_footnotes, read_notes
 from checker.hyphenation import inconsistent_affixes, is_unhyphenated, rule_violations, word_scripts
 from checker.model import ERROR, WARNING, Analysis, CheckContext, Finding  # noqa: F401 (re-exported)
@@ -21,6 +22,7 @@ from checker.spelling import STATE_RIGHT, STATE_WRONG
 from checker.books import book_from_file_name
 from checker.spaces import check_special_spaces
 from checker.terms import check_term_lists, check_terms
+from checker.versification import ORIGINAL, STANDARD_FILES
 from checker.structure import (
     PERIPHERAL_BOOKS, XtReference, check_book_titles, check_file, check_structure, index_book, verse_range,
 )
@@ -779,6 +781,16 @@ def check_styled_words(usage: UsageCounter, ctx: CheckContext) -> Iterator[Findi
                           f"{len(majority) + len(minority)})", "")
 
 
+def check_divine_name_verses(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
+    """The divine name without \\nd in a verse where translations have it in \\nd (checker/divine_name.py)."""
+    versification = ctx.settings.versification or ENGLISH
+    if versification != ORIGINAL and versification not in STANDARD_FILES:
+        ctx.skipped["divine-name"] = (f"Not checked: the versification of the project ({versification}) is not a "
+                                      "standard one.")
+        return
+    yield from check_divine_name(usage.style_refs, usage.verse_texts, versification)
+
+
 def _book_name_key(name: str) -> str:
     # "~" is the USFM no-break space: "\toc3 1~Цар." = "1 Цар.".
     return " ".join(name.replace("~", " ").lower().rstrip(".").split())
@@ -975,6 +987,7 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "variants": check_variants,
     "name-case": check_name_case,
     "styled-words": check_styled_words,
+    "divine-name": check_divine_name_verses,
     "numbers": check_numbers,
     "footnotes": check_footnote_forms,
     "references": check_references,
