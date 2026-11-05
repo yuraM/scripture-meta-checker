@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable, Iterator
 
 from checker import places
 from checker.approvals import check_approvals
+from checker.footnotes import Note, check_footnotes, read_notes
 from checker.hyphenation import inconsistent_affixes, is_unhyphenated, rule_violations, word_scripts
 from checker.model import ERROR, WARNING, Analysis, CheckContext, Finding  # noqa: F401 (re-exported)
 from checker.pairs import check_pairs
@@ -435,6 +436,7 @@ class UsageCounter:
         # 4-digit numbers of the text (not introductions): written with / without the thousands separator,
         # each as (book, chapter:verse, number, context).
         self.four_digit: tuple[list[tuple[str, str, str, str]], list[tuple[str, str, str, str]]] = ([], [])
+        self.footnotes: list[Note] = []  # footnotes of the checked books, read from the raw files
 
     def _add_numbers(self, analysis: Analysis, ctx: CheckContext) -> None:
         separator = ctx.settings.number_thousands_separator
@@ -477,6 +479,7 @@ class UsageCounter:
         self.book_names.setdefault(_book_name_key(book), book)
         if with_references:
             self.references.extend(index.references)
+            self.footnotes.extend(read_notes(book, content))
             self.note_references.extend(index.note_references)
 
     def _add_case_and_styles(self, analysis: Analysis, ctx: CheckContext) -> None:
@@ -713,6 +716,11 @@ def check_numbers(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
                           f"written like '{example}'. Is it a year?", context)
 
 
+def check_footnote_forms(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
+    """Footnotes built differently from similar ones (checker/footnotes.py)."""
+    yield from check_footnotes(usage.footnotes, frozenset(ctx.settings.sentence_final_punctuation), usage.verse_texts)
+
+
 def check_styled_words(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
     """A word nearly always inside a character style (\\nd) but sometimes not, or the other way round."""
     for (marker, key), (inside, outside) in sorted(usage.style_refs.items()):
@@ -922,6 +930,7 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "name-case": check_name_case,
     "styled-words": check_styled_words,
     "numbers": check_numbers,
+    "footnotes": check_footnote_forms,
     "references": check_references,
     "parallel-changes": check_parallel_changes,
     "parallel-differences": check_parallel_differences,

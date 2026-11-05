@@ -95,6 +95,10 @@ CHECK_DESCRIPTIONS = {
                     "Often this is on purpose.",
     "references": "References must point to a book, chapter and verse that exist, and use the marks from Paratext: "
                   f"{places.REFERENCE_FORMAT}. Book names: {places.BOOK_NAMES} (\\toc1-3).",
+    "footnotes": "Footnotes that are built differently from similar footnotes of this project. The start of a "
+                 "footnote (Lit.:) and the marker after it (\\fq = words of the verse, \\fqa = another reading) are "
+                 "compared with the footnotes that start the same way. Also footnotes without an end mark (.) when "
+                 "nearly all footnotes have one. The usual form and its count are in each message.",
     "unused": "Entries of the lists that are never used in the text. This is information only: usually it is no problem.",
     "parallel-changes": f"Verses that were approved in Paratext {places.PARALLEL_PASSAGES} (column Status), "
                         "but their words are different now. Check that the parallel verses still agree.",

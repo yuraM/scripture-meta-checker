@@ -138,10 +138,12 @@ wordlist/
 │   ├── terms.py         # Biblical Terms (terms list + TermRenderings.xml): terms, term-lists
 │   ├── versification.py # .vrs mappings: Original verse numbers -> English (eng.vrs + custom.vrs of the project)
 │   ├── eng.vrs          # Paratext English versification (data; Paratext keeps it inside the program)
+│   ├── lxx/vul/rsc/rso.vrs # the other standard versifications (report links convert verses to English)
 │   ├── eng.vrs.LICENSE  # MIT license of eng.vrs (UBS ICAP)
 │   ├── structure.py     # USFM structure: markers, notes, chapter/verse numbers (raw file)
 │   ├── places.py        # names of Paratext windows/menus used in report texts
 │   ├── approvals.py     # approvals check: approved list entries that look wrong
+│   ├── footnotes.py     # footnotes check: notes built differently from similar ones (raw \f … \f*)
 │   ├── spaces.py        # special-spaces check: U+202F, \fv … \fv*, abbreviations with ~ (raw file)
 │   ├── html_report.py   # HTML report: index.html + one page per check (static, inline CSS/JS)
 │   ├── gui.py           # tkinter window: choose project and checks, run, open the report
@@ -240,6 +242,7 @@ wordlist/
 | `references` (opt-in) | `\xt`, `\fr`, `\xo` + `\toc1-3` of all books + ChapterVerseSeparator, RangeIndicator, SequenceIndicator, ChapterRangeSeparator, ChapterNumberSeparator, BookSequenceSeparator | `\xt` points to a chapter/verse that does not exist (every part, verses after the sequence mark, range ends, link targets); wrong mark in `\xt`/`\fr`/`\xo`; range that goes backwards | book name not found in any `\toc1-3`; link target book not in the project; text and link show different numbers (`8|JER 22:28`); non-ASCII letter in a link; number with no chapter after the chapter mark (`13፥2፤ 12`: verse or chapter? a person decides) |
 | `terms` (opt-in) | terms list (BiblicalTermsListSetting: project folder or Paratext program folder; ProjectBiblicalTerms.xml) + TermRenderings.xml + eng.vrs/custom.vrs | — | clear cases only: none of the renderings of a term is in a verse of the term, while the term is rendered in all other verses (missing in ≤2 verses and ≤5%); rendering found nowhere in the text (`cлов` with Latin `c`). The hidden rest is counted in the report note |
 | `term-lists` (opt-in) | the same files | — | verse marked OK without a rendering (Denial) where the rendering is there now, or which is not a verse of the term; rendering guessed by Paratext (only terms of the project list) |
+| `footnotes` (opt-in) | raw `\f … \f*` + SentenceFinalPunctuation + verse texts | formula (fixed text before the first marker, numbers as `N`, + that marker: `Букв.: \fqa`) one character or only punctuation away from one used ≥20× and ≥10× more with the same marker (`Outros dizem \fqa` vs 49× `Outros dizem: \fqa`); for a note without a marker only punctuation inside counts; note without an end mark when ≥99% of ≥100 notes have one | `\fq`/`\fqa` swapped or missing in ≤10% of ≥12 notes with the formula; `\fqa` of ≥3 words word for word in the verse where the formula usually has `\fq`; formula with one other word than one used ≥5× and ≥3× more, same first word and marker (only formulas with a marker; a changed word of ≤2 letters = unit, skipped) |
 | `unused` (opt-in) | all of the above lists + hyphenatedWords.txt | — | list entry occurs 0 times in the checked text |
 | `parallel-changes` (opt-in) | ParallelPassageStatus.xml | — | words of an approved verse are different now (`'a' was changed to 'b'`); verse changed very much |
 | `parallel-differences` (opt-in) | ParallelPassageStatus.xml | — | two verses (or verse ranges) of one parallel group, from different books, differ in 1–3 words |
@@ -270,7 +273,7 @@ book in order, because a quote may span paragraphs and chapters. Design:
 - Notes quote fragments of the text (`Or “I have been given … to`): no level check, all findings
   are warnings marked "(in a footnote)".
 
-`unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `numbers`, `references`, `parallel-changes`,
+`unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `numbers`, `footnotes`, `references`, `parallel-changes`,
 `parallel-differences`, `terms` and `term-lists` are project-level checks (`PROJECT_CHECKS`): they run once after
 all books, using `UsageCounter`. They are not in the default run (`unused` ≈22k findings,
 mostly SpellingStatus `R` words and hyphenation entries) and must be requested with
@@ -419,21 +422,6 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
 - References inside normal sentences (not `\xt`/`\fr`/`\xo`; 444 in `tir`) are not checked. Tried and removed
   (2026-10-31): nearly all findings were false. Notes use Hebrew verse numbers (`32፥1`), and common words equal book
   abbreviations (Ukrainian `як` = James, Tigrinya `ኣብ` = Obadiah).
-- **TODO (agreed 2026-11-04, not coded yet): `footnotes` (opt-in)** — footnotes built differently from similar ones,
-  no language data. "Formula" of a note = its fixed text before the first quote/reference tag (`\fq \fqa \fl \fk \xt
-  \tl …`), numbers -> `N`, plus that tag (`Букв.: \fqa`). Measured on 8 projects: 3–71 findings each, <2% of notes.
-  - error E1: formula one character or only punctuation away from one used ≥20× and ≥10× more, with the same tag
-    (`Букв:` vs `Букв.:` 335×, `Secarah harfiah` vs 424×); a changed whole word of ≤2 letters (units) is skipped.
-  - error E2: note not ending with a SentenceFinalPunctuation mark (or `…`; closing quotes/brackets skipped), only if
-    ≥99% of the notes do (`Близько 2,9 кг\f*`, `\xt …\xt*\f*` without the full stop).
-  - warning W1: same formula, quote tag swapped `\fq` <-> `\fqa` or missing, in ≤10% of its ≥12 notes (`Букв.: \fq`
-    12× vs `\fqa` 322×). Skip `\fv` (verse number inside a quote) and `\tl` (transliteration is a normal variant).
-  - warning W2: `\fqa` of ≥3 words standing word for word in the verse (should it be `\fq`?), only when the same
-    formula usually has `\fq` (`Деякі рукописи не містять слів \fqa Благословенна ти між жінками.`). Alone it is noisy
-    (alternative punctuation, both readings in the verse). `\fq` not in the verse: dropped, mostly word meanings.
-  - warning W4: formula with one other word than one used ≥5× and ≥3× more, same first word and tag (`Див. виноску
-    до` vs `Див. пояснення до`); about half are real differences of meaning, kept as a review list (user decision).
-  - Messages show the usual form and its count. Measuring scripts were temporary (not in the repo).
 - **Links to Paratext** (done 2026-11-05, `checker/paratext_link.py`): each `chapter:verse` in `Where:` of the HTML
   pages is a link `scripturechecker:<Settings.xml Name>/MAT%205:3?vrs=<Versification>` (built in the page script;
   chapter 0 and places without a book stay text). Windows runs `checker.exe "<link>"` (or `pythonw checker_app.py`):
@@ -442,10 +430,13 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
   A), brings Paratext to the front and reads the child window titles (`<project>: MAT 5:3 (Standard Translation)`) to
   see that a window of the project moved; else a message box: Paratext not open / project not open / window in
   another scroll group. The URL protocol is registered under `HKCU\Software\Classes\scripturechecker` (no admin
-  rights) every time the window starts, so a moved exe keeps working. Tested with Paratext 9.5 (English
-  versification project). Not known yet: whether Paratext reads the reference in the project versification or in
-  English; for an Original-versification project a second try sends the English verse (eng.vrs) when the first one
-  did not land. Other versifications: only the message. Test when such a project is open in Paratext.
+  rights) every time the window starts, so a moved exe keeps working. Measured 2026-11-05: Paratext reads the sent
+  reference in the **English** versification and shows it in each project's own (English PSA 51:1 -> PSA 50:3 in a
+  Russian Protestant project). So the verse is first converted to English (`versification.to_english`: project
+  versification -> Original -> English, with `lxx/vul/rsc/rso.vrs` from the same UBS repository as eng.vrs, MIT,
+  bundled; a text verse maps to verse 1, not to a title `:0`); custom.vrs is not known in the link, so if the window
+  does not land, up to 4 tries add the difference between wanted and shown verse (`next_try`). Tested on a Russian
+  Protestant project: PSA 113:9 (= English 115:1), NUM 30:1 (= 29:40), PSA 9:22 and others land at once.
   The exe sets `PYINSTALLER_RESET_ENVIRONMENT=1` at start: a browser opened by "Open report" inherits the variables
   of the onefile exe (`_PYI_APPLICATION_HOME_DIR` = its temporary `_MEI…` folder), and a link opened later started
   checker.exe as a part of that old run, whose folder was gone: "Failed to load Python DLL" (found 2026-11-05).
@@ -456,7 +447,7 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
 - Use `pathlib`, type hints, small pure functions; the CLI entry point uses `argparse`.
 - A new check = a function `(Analysis, CheckContext) -> Iterator[Finding]` registered in
   `CHECKS`, plus a test in `tests/test_checker.py`, plus a row in the table above, plus a place in one stage of
-  `checker/stages.py` (a test fails otherwise; the planned `footnotes` goes to stage 5).
+  `checker/stages.py` (a test fails otherwise).
 - The project folder is a required CLI argument, with no default; `main.py` gives it from its `PROJECT` setting.
 - Report format: `CHECK: <id>`, a simple description of the check (`CHECK_DESCRIPTIONS` in `checker/cli.py`,
   add one for a new check) and the counts. With `--unique` then numbered blocks, errors first, most frequent

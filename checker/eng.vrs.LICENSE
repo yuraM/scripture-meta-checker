@@ -1,5 +1,5 @@
-eng.vrs (the English versification of Paratext) in this folder is the same file as
-examples/eng.vrs in https://github.com/ubsicap/versification_json, published under this license:
+eng.vrs (the English versification of Paratext) and lxx.vrs, vul.vrs, rsc.vrs, rso.vrs (Septuagint, Vulgate,
+Russian Protestant, Russian Orthodox) in this folder are the same files as examples/<name>.vrs in https://github.com/ubsicap/versification_json, published under this license:
 
 MIT License
 

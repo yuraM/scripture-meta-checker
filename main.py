@@ -40,6 +40,7 @@ CHECKS = [
     "name-case",             # word usually capitalized mid-sentence but not here (or the reverse)
     "styled-words",          # word usually in \nd but not here (or the reverse)
     "references",            # references: chapters/verses that do not exist, marks not from Settings.xml
+    "footnotes",             # footnotes built differently from similar ones (Lit.: \fq vs \fqa, missing full stop)
     "parallel-changes",      # ParallelPassageStatus.xml: approved parallel verses that were changed later
     "parallel-differences",  # ParallelPassageStatus.xml: parallel verses that differ in a few words
     "terms",                 # Biblical Terms: rendering missing in a verse (clear cases only), unused renderings

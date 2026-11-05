@@ -17,15 +17,18 @@ import time
 from pathlib import Path
 from urllib.parse import quote, unquote
 
+from checker.versification import to_english
+
 PROTOCOL = "scripturechecker"
 TITLE = "Scripture checker"
-ENGLISH, ORIGINAL = "4", "1"  # Settings.xml <Versification>
+ENGLISH = "4"  # Settings.xml <Versification>
 _FOCUS_KEY = r"Software\SantaFe\Focus\ScriptureReference"
 _FOCUS_MESSAGE = "SantaFeFocus"
 _HWND_BROADCAST = 0xFFFF
 _TITLE_RE = re.compile(r"^(.+?): ([0-9A-Z]{3}) (\d+):(\d+)")
 _REF_RE = re.compile(r"^([0-9A-Z]{3}) (\d+):(\d+)$")
 WAIT_SECONDS = 1.5  # time for Paratext to move its windows
+MAX_TRIES = 4  # sends to find the verse in a project that is not in the English versification
 
 
 def make_link(project: str, reference: str, versification: str = "") -> str:
@@ -61,16 +64,6 @@ def shows(shown: str, wanted: str) -> bool:
         return True
     book, chapter, verse = _REF_RE.match(wanted).groups()
     return verse == "0" and shown == f"{book} {chapter}:1"
-
-
-def english_reference(reference: str, versification: str) -> str | None:
-    """The reference in the English versification, for a project in the Original versification (eng.vrs)."""
-    if versification != ORIGINAL:
-        return None
-    from checker.versification import original_to_project
-    book, chapter, verse = _REF_RE.match(reference).groups()
-    mapped = original_to_project(Path()).get((book, int(chapter), int(verse)))
-    return f"{mapped[0]} {mapped[1]}:{mapped[2]}" if mapped else None
 
 
 # ------------------------------------------------------------------------------------------------ Windows part ---
@@ -172,11 +165,36 @@ def _to_front(hwnd: int) -> None:
     user32.SetForegroundWindow(hwnd)
 
 
-def _project_shows(project: str, wanted: str) -> tuple[bool, list[str]]:
-    """(a window of the project shows the verse, the references its windows show)."""
-    shown = [ref for _, titles in _paratext_windows() for name, ref in filter(None, map(window_reference, titles))
-             if name.lower() == project.lower()]
-    return any(shows(ref, wanted) for ref in shown), shown
+def next_try(sent: str, wanted: str, shown: str) -> str | None:
+    """The reference to send next. Paratext reads a sent reference in the English versification and shows it in the
+    versification of the project (English PSA 51:1 = PSA 50:3 in a project with Septuagint psalm numbers), so the
+    difference between the wanted and the shown verse is added to what was sent. None = no better guess."""
+    sent_m, wanted_m, shown_m = (_REF_RE.match(ref) for ref in (sent, wanted, shown))
+    if not (sent_m and wanted_m and shown_m) or shown_m.group(1) != wanted_m.group(1):
+        return None
+    chapter = int(sent_m.group(2)) + int(wanted_m.group(2)) - int(shown_m.group(2))
+    verse = int(sent_m.group(3)) + int(wanted_m.group(3)) - int(shown_m.group(3))
+    guess = f"{wanted_m.group(1)} {chapter}:{verse}"
+    return guess if chapter >= 1 and verse >= 0 and guess != sent else None
+
+
+def _project_refs(project: str) -> list[str]:
+    return [ref for _, titles in _paratext_windows() for name, ref in filter(None, map(window_reference, titles))
+            if name.lower() == project.lower()]
+
+
+def _send_and_read(project: str, reference: str, before: list[str]) -> list[str]:
+    """Send a reference and wait until a window of the project shows another verse (or the time is over)."""
+    _send(reference)
+    end = time.monotonic() + WAIT_SECONDS
+    shown = before
+    while time.monotonic() < end:
+        time.sleep(0.1)
+        shown = _project_refs(project)
+        if shown != before:
+            time.sleep(0.1)  # Paratext may still be moving
+            return _project_refs(project)
+    return shown
 
 
 def go_to(url: str) -> str:
@@ -188,25 +206,27 @@ def go_to(url: str) -> str:
     windows = _paratext_windows()
     if not windows:
         return f"Paratext is not open. Open it and the project {project}, then click {reference} again."
-    has_project = any(name.lower() == project.lower()
-                      for _, titles in windows for name, _ in filter(None, map(window_reference, titles)))
+    shown = _project_refs(project)
     _to_front(windows[0][0])
-    tries = [reference]
-    english = english_reference(reference, versification)
-    if english and english != reference:
-        tries.append(english)
-    shown: list[str] = []
-    for sent in tries:
-        _send(sent)
-        end = time.monotonic() + WAIT_SECONDS
-        while time.monotonic() < end:
-            done, shown = _project_shows(project, reference)
-            if done:
-                return ""
-            time.sleep(0.1)
-    if not has_project:
+    if not shown:
+        _send(reference)
         return (f"The project {project} is not open in Paratext. Other windows went to {reference}. "
                 f"Open {project} in Paratext and click {reference} again.")
+    # Paratext reads a sent reference in the English versification: convert it (custom.vrs of the project is not
+    # known here; the tries below correct what is left).
+    book, chapter, verse = _REF_RE.match(reference).groups()
+    english = to_english((book, int(chapter), int(verse)), versification) if versification else None
+    sent = f"{english[0]} {english[1]}:{english[2]}" if english else reference
+    for _ in range(MAX_TRIES if versification != ENGLISH else 1):
+        before = shown
+        shown = _send_and_read(project, sent, before)
+        if any(shows(ref, reference) for ref in shown):
+            return ""
+        # The window that moved shows where the sent reference landed in the project.
+        moved = [ref for ref in shown if ref not in before] or shown
+        sent = next((guess for ref in moved if (guess := next_try(sent, reference, ref))), None)
+        if sent is None:
+            break
     return (f"The window of {project} did not go to {reference} (it shows {', '.join(shown)}). "
             "Maybe the window is in another scroll group: in Paratext, set the scroll group of the window to A.")
 

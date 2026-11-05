@@ -896,6 +896,44 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(json.loads(data)[0]["context"], "a </script> b")
 
 
+class FootnotesTest(unittest.TestCase):
+    FINAL = frozenset(".!?")
+
+    def run_notes(self, bodies, verse_texts=None):
+        from checker.footnotes import check_footnotes, read_notes
+        usfm = "\\id TST\n\\c 1\n" + "\n".join(f"\\v {n} Текст.\\f + \\fr 1:{n} \\ft {body}\\f*"
+                                             for n, body in enumerate(bodies, start=1))
+        notes = read_notes("TST", usfm)
+        return [(f.ref, f.severity, f.message) for f in check_footnotes(notes, self.FINAL, verse_texts or {})]
+
+    def test_read_notes(self):
+        from checker.footnotes import read_notes
+        note, = read_notes("TST", "\\c 3\n\\v 5 Слово\\f + \\fr 3:5 \\ft Букв.: \\fqa сини\\fqa* Бога.\\f*")
+        self.assertEqual((note.ref, note.formula, note.text), ("3:5", ("Букв.:", "fqa"), "Букв.: сини Бога."))
+
+    def test_typo_in_formula(self):
+        bodies = ["Букв.: \\fqa слово."] * 20 + ["Букв: \\fqa слово."]
+        self.assertEqual(self.run_notes(bodies), [("1:21", "error", "note starts 'Букв: \\fqa', but 20 notes start "
+                                                                       "'Букв.: \\fqa': a typing mistake?")])
+
+    def test_quote_marker(self):
+        bodies = ["Букв.: \\fqa слово."] * 12 + ["Букв.: \\fq слово."] + ["Букв.: слово."]
+        found = self.run_notes(bodies)
+        self.assertEqual([(ref, "has no \\fqa" in message, "has \\fq," in message) for ref, _, message in found],
+                         [("1:14", True, False), ("1:13", False, True)])
+
+    def test_end_mark(self):
+        bodies = [f"Пояснення {n}." for n in range(120)] + ["Близько 2,9 кг"]
+        self.assertEqual([ref for ref, _, _ in self.run_notes(bodies)], ["1:121"])
+
+    def test_alternative_reading_in_the_verse(self):
+        bodies = ["Деякі рукописи не містять слів \\fq інше слово."] * 12 + ["Деякі рукописи не містять слів \\fqa "
+                                                                            "та у вашому дусі."]
+        found = self.run_notes(bodies, {("TST", 1, 13): "Прославте Бога в тілі та у вашому дусі."})
+        self.assertEqual([ref for ref, _, _ in found], ["1:13"])
+        self.assertIn("should it be \\fq?", found[0][2])
+
+
 class ParatextLinkTest(unittest.TestCase):
     def test_link_round_trip(self):
         from checker.paratext_link import make_link, parse_link
@@ -914,10 +952,22 @@ class ParatextLinkTest(unittest.TestCase):
         self.assertTrue(shows("MAT 5:1", "MAT 5:0"))
         self.assertFalse(shows("MAT 5:2", "MAT 5:3"))
 
-    def test_original_versification(self):
-        from checker.paratext_link import english_reference
-        self.assertEqual(english_reference("PSA 51:3", "1"), "PSA 51:1")
-        self.assertIsNone(english_reference("PSA 51:3", "4"))
+    def test_to_english(self):
+        from checker.versification import to_english
+        self.assertEqual(to_english(("PSA", 50, 3), "5"), ("PSA", 51, 1))  # Septuagint psalm numbers
+        self.assertEqual(to_english(("PSA", 113, 9), "5"), ("PSA", 115, 1))  # a verse of text, not the title
+        self.assertEqual(to_english(("NUM", 30, 1), "5"), ("NUM", 29, 40))
+        self.assertEqual(to_english(("PSA", 51, 3), "1"), ("PSA", 51, 1))
+        self.assertEqual(to_english(("MAT", 5, 3), "4"), ("MAT", 5, 3))
+        self.assertIsNone(to_english(("MAT", 5, 3), "9"))
+
+    def test_next_try_for_another_versification(self):
+        from checker.paratext_link import next_try
+        # Wanted PSA 50:3 of the project; sending it showed PSA 49:3, so the next try is one chapter on.
+        self.assertEqual(next_try("PSA 50:3", "PSA 50:3", "PSA 49:3"), "PSA 51:3")
+        self.assertEqual(next_try("PSA 51:3", "PSA 50:3", "PSA 50:5"), "PSA 51:1")
+        self.assertIsNone(next_try("PSA 51:1", "PSA 50:3", "MAT 1:1"))  # another book: no guess
+        self.assertIsNone(next_try("PSA 1:1", "PSA 1:1", "PSA 2:1"))  # chapter 0
 
     def test_links_in_the_page(self):
         from checker.html_report import CheckResult, Problem, write_check_page

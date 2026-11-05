@@ -5,10 +5,13 @@ versification (org.vrs), and so on. The English versification (eng.vrs, the same
 github.com/ubsicap/versification_json, MIT license: eng.vrs.LICENSE) is kept next to this module, because Paratext
 keeps it inside the program. A project may change it with its own
 custom.vrs (same syntax); a custom line replaces the lines of eng.vrs about the same verses.
+The other standard versifications of Paratext (lxx, vul, rsc, rso.vrs, same source and license) are kept too: links of
+the report send English verse numbers to Paratext.
 """
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from pathlib import Path
 
 Verse = tuple[str, int, int]
@@ -62,3 +65,39 @@ def original_to_project(project: Path) -> dict[Verse, Verse]:
     for mine, original in pairs:
         mapping.setdefault(original, mine)
     return mapping
+
+
+# Settings.xml <Versification> -> file of the standard versification ("1" = Original: no file, it is the reference).
+STANDARD_FILES = {"2": "lxx.vrs", "3": "vul.vrs", "4": "eng.vrs", "5": "rsc.vrs", "6": "rso.vrs"}
+ORIGINAL = "1"
+
+
+@lru_cache(maxsize=None)
+def _to_original(name: str) -> dict[Verse, Verse]:
+    """Verse of a standard versification -> Original verse."""
+    mapping: dict[Verse, Verse] = {}
+    for mine, original in read_mappings(Path(__file__).with_name(name).read_text(encoding="utf-8-sig")):
+        # "PSA 113:9 = PSA 115:0" and "PSA 113:9-26 = PSA 115:1-18": a verse of text is verse 1, not the title.
+        if mine not in mapping or (mapping[mine][2] == 0 and original[2] and mine[2]):
+            mapping[mine] = original
+    return mapping
+
+
+@lru_cache(maxsize=None)
+def _original_to_english() -> dict[Verse, Verse]:
+    mapping: dict[Verse, Verse] = {}
+    for mine, original in read_mappings(ENGLISH_VRS.read_text(encoding="utf-8-sig")):
+        mapping.setdefault(original, mine)
+    return mapping
+
+
+def to_english(verse: Verse, versification: str) -> Verse | None:
+    """The same verse in the English versification (through Original); None = unknown versification.
+    A project's custom.vrs is not used here."""
+    if versification == "4":
+        return verse
+    if versification != ORIGINAL:
+        if versification not in STANDARD_FILES:
+            return None
+        verse = _to_original(STANDARD_FILES[versification]).get(verse, verse)
+    return _original_to_english().get(verse, verse)
