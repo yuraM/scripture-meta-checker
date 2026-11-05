@@ -13,6 +13,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from checker.paratext_link import PROTOCOL
+from checker.stages import FIRST_STAGES, STAGES, stage_number
+
 PAGE_SIZE = 200  # blocks shown at once; large reports (60 000 blocks) would make the browser slow
 HTML_FOLDER = "html"
 TXT_FOLDER = "txt"
@@ -25,6 +28,7 @@ class Problem:
     count: int
     context: str
     where: str
+    item: str = ""  # what was found (a word, a character, a pattern): marked in the context
 
 
 @dataclass
@@ -54,6 +58,8 @@ table{border-collapse:collapse;width:100%;background:var(--card);border:1px soli
 font-variant-numeric:tabular-nums}
 th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
 td.n,th.n{text-align:right}
+tr.stage th{background:var(--bg);padding-top:14px;font-size:.95rem}
+.first{background:var(--err-bg);color:var(--err);border-left:4px solid var(--err);padding:8px 12px;max-width:75ch}
 .e{color:var(--err);font-weight:600}.w{color:var(--warn);font-weight:600}.z{color:var(--muted)}
 .tools{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:16px 0}
 input[type=search]{flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--line);border-radius:4px;
@@ -64,26 +70,104 @@ padding:10px 14px;margin:0 0 10px}
 .block h3{margin:0 0 4px;font-size:1rem;font-weight:600;overflow-wrap:anywhere}
 .block .row{font-size:.92rem;overflow-wrap:anywhere}
 .block .label{display:inline-block;min-width:4.5em;color:var(--muted)}
+a.ref{text-decoration:none;border-bottom:1px dotted var(--accent)}a.ref:hover{border-bottom-style:solid}
 .text{font-family:Consolas,monospace;background:var(--bg);padding:1px 4px;border-radius:3px}
 button{font:inherit;padding:6px 14px;border:1px solid var(--line);border-radius:4px;background:var(--card);
 color:var(--fg);cursor:pointer}
 .scroll{overflow-x:auto}
+code.item{font-family:Consolas,monospace;font-weight:400;background:#1f2933;color:#f5f7f6;padding:1px 6px;
+border-radius:4px;cursor:copy;white-space:pre-wrap}
+code.item:hover{outline:2px solid var(--accent)}
+.sp{background:rgba(240,192,98,.55);border-radius:2px}
+mark{background:var(--warn-bg);color:inherit;font-weight:700;outline:1px solid var(--warn);border-radius:2px}
+#copied{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1f2933;color:#f5f7f6;
+padding:6px 14px;border-radius:4px;opacity:0;transition:opacity .2s;pointer-events:none}
+#copied.on{opacity:1}
+@media (prefers-color-scheme:dark){code.item{background:#000;border:1px solid var(--line)}}
 """
 
-SCRIPT = """
+# Raw string: the regular expressions below keep their backslashes.
+SCRIPT = r"""
 const data = JSON.parse(document.getElementById('data').textContent);
 const list = document.getElementById('list'), more = document.getElementById('more'),
       info = document.getElementById('info'), search = document.getElementById('search'),
       errorsOnly = document.getElementById('errors-only');
 let shown = 0, matches = [];
 function esc(s){return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// "MAT 27:46, 28:1 (2×); MRK 15:34": each chapter:verse becomes a link that makes Paratext show the verse
+// (checker/paratext_link.py); places without a book and chapter (lists, chapter 0) stay text.
+function refLink(ref){
+  return `${LINK.protocol}:${encodeURIComponent(LINK.project)}/${encodeURIComponent(ref).replace(/%3A/g, ':')}`
+       + (LINK.vrs ? `?vrs=${encodeURIComponent(LINK.vrs)}` : '');
+}
+function where(text){
+  if (!LINK.project) return esc(text);
+  return text.split('; ').map(group => {
+    const m = /^([0-9A-Z]{3}) (.+)$/.exec(group);
+    if (!m) return esc(group);
+    return esc(m[1]) + ' ' + m[2].split(', ').map(part => {
+      const v = /^(\d+):(\d+)/.exec(part);
+      if (!v || v[1] === '0') return esc(part);
+      return `<a class="ref" href="${esc(refLink(`${m[1]} ${+v[1]}:${+v[2]}`))}" title="Show in Paratext">${esc(part)}</a>`;
+    }).join(', ');
+  }).join('; ');
+}
+// Spaces that cannot be seen (no-break, narrow, zero width) are marked; the real character stays for copying.
+const INVISIBLE = /[  -‍ ⁠﻿]/;
+function visible(s, edges){
+  let out = '';
+  [...s].forEach((c, k) => {
+    const edge = edges && c === ' ' && (k === 0 || k === s.length - 1);
+    out += (INVISIBLE.test(c) || edge)
+      ? `<span class="sp" title="U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}">${c}</span>`
+      : esc(c);
+  });
+  return out;
+}
+// 'something' in a message = what was found: shown without the quotes, on a dark background, copied on click.
+const QUOTED = /'(.+?)'(?=[\s,.;:)\]!?]|$)/g;
+function chips(message){
+  let out = '', last = 0;
+  for (const m of message.matchAll(QUOTED)) {
+    out += esc(message.slice(last, m.index))
+         + `<code class="item" title="Click to copy" data-copy="${esc(m[1])}">${visible(m[1], true)}</code>`;
+    last = m.index + m[0].length;
+  }
+  return out + esc(message.slice(last));
+}
+// The found item is marked in the text around it.
+function context(p){
+  let item = p.item || '', at = item ? p.context.indexOf(item) : -1;
+  if (at < 0 && item.includes('_')) {  // a punctuation pattern: _ stands for a space
+    item = item.replace(/^_|_$/g, '').replace(/_/g, ' ');
+    at = item ? p.context.indexOf(item) : -1;
+  }
+  if (at < 0) return visible(p.context, false);
+  return visible(p.context.slice(0, at), false) + `<mark>${visible(item, false)}</mark>`
+       + visible(p.context.slice(at + item.length), false);
+}
 function block(p, i){
   const rows = [];
   if (p.count > 1) rows.push(`<div class="row"><span class="label">Found:</span> ${p.count} times</div>`);
-  if (p.context) rows.push(`<div class="row"><span class="label">Text:</span> <span class="text">${esc(p.context)}</span></div>`);
-  rows.push(`<div class="row"><span class="label">Where:</span> ${esc(p.where)}</div>`);
-  return `<div class="block ${p.severity}"><h3>${i + 1}. ${esc(p.message)}</h3>${rows.join('')}</div>`;
+  if (p.context) rows.push(`<div class="row"><span class="label">Text:</span> <span class="text">${context(p)}</span></div>`);
+  rows.push(`<div class="row"><span class="label">Where:</span> ${where(p.where)}</div>`);
+  return `<div class="block ${p.severity}"><h3>${i + 1}. ${chips(p.message)}</h3>${rows.join('')}</div>`;
 }
+const toast = document.createElement('div'); toast.id = 'copied'; toast.textContent = 'Copied';
+document.body.appendChild(toast);
+function copied(){ toast.classList.add('on'); setTimeout(() => toast.classList.remove('on'), 900); }
+function copyText(text){
+  const fallback = () => {
+    const area = document.createElement('textarea'); area.value = text; document.body.appendChild(area);
+    area.select(); document.execCommand('copy'); area.remove(); copied();
+  };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(copied, fallback);
+  else fallback();
+}
+list.addEventListener('click', e => {
+  const chip = e.target.closest('code.item');
+  if (chip) copyText(chip.dataset.copy);
+});
 function render(){
   const q = search.value.trim().toLowerCase();
   matches = data.map((p, i) => [p, i]).filter(([p]) =>
@@ -119,16 +203,38 @@ def _counts(result: CheckResult) -> str:
     return f'<td class="n">{errors}</td><td class="n">{warnings}</td><td class="n">{len(result.problems)}</td>'
 
 
+def _first_stages_note(results: list[CheckResult]) -> str:
+    """A line on top when an early stage has errors and later stages were checked too: fix the early ones first."""
+    early = [r for r in results if 0 < stage_number(r.name) <= FIRST_STAGES and r.errors]
+    if not early or all(0 < stage_number(r.name) <= FIRST_STAGES for r in results):
+        return ""
+    names = ", ".join(html.escape(r.name) for r in early)
+    return (f"<p class=\"first\">Stages 1-{FIRST_STAGES} have errors ({names}). Fix them first: "
+            "they can cause false problems in the later stages.</p>\n")
+
+
+def _index_rows(results: list[CheckResult]) -> str:
+    rows, stage = [], None
+    for r in results:
+        number = stage_number(r.name)
+        if number != stage:
+            stage = number
+            title = STAGES[number - 1][0] if number else "Other checks"
+            rows.append(f'<tr class="stage"><th colspan="5">{html.escape(title)}</th></tr>')
+        rows.append(f'<tr><td><a href="{HTML_FOLDER}/{html.escape(r.name)}.html">{html.escape(r.name)}</a></td>'
+                    f'{_counts(r)}<td><a class="muted" href="{TXT_FOLDER}/{html.escape(r.name)}.txt">txt</a></td></tr>')
+    return "\n".join(rows)
+
+
 def write_index(report_dir: Path, project: str, results: list[CheckResult], location_help: str) -> Path:
-    rows = "\n".join(
-        f'<tr><td><a href="{HTML_FOLDER}/{html.escape(r.name)}.html">{html.escape(r.name)}</a></td>{_counts(r)}'
-        f'<td><a class="muted" href="{TXT_FOLDER}/{html.escape(r.name)}.txt">txt</a></td></tr>'
-        for r in results)
+    """One row per check, under the title of its stage (results are expected in stage order)."""
+    rows = _index_rows(results)
     errors = sum(r.errors for r in results)
     warnings = sum(r.warnings for r in results)
     body = (f"<h1>{html.escape(project)}</h1>\n"
             f"<p class=\"muted\">Checked {datetime.now():%Y-%m-%d %H:%M}. "
             f"Errors: {errors}, warnings: {warnings}. Click a check to see its problems.</p>\n"
+            + _first_stages_note(results) +
             f"<p><a href=\"{TXT_FOLDER}/\">Open the folder of text reports (txt)</a> "
             f"<span class=\"muted\">&middot; <a class=\"muted\" href=\"{HTML_FOLDER}/\">html</a></span></p>\n"
             f"<p class=\"muted desc\">{html.escape(location_help)}</p>\n"
@@ -140,7 +246,9 @@ def write_index(report_dir: Path, project: str, results: list[CheckResult], loca
     return path
 
 
-def write_check_page(report_dir: Path, project: str, result: CheckResult, location_help: str) -> Path:
+def write_check_page(report_dir: Path, project: str, result: CheckResult, location_help: str,
+                     link: dict[str, str] | None = None) -> Path:
+    """`link`: {"project": Paratext short name, "vrs": Settings.xml Versification} for links to Paratext."""
     txt = f"../{TXT_FOLDER}/{html.escape(result.name)}.txt"
     header = (f"<p><a href=\"../index.html\">&larr; All checks of {html.escape(project)}</a> "
               f"<span class=\"muted\">&middot; <a class=\"muted\" href=\"{txt}\">txt</a></span></p>\n"
@@ -159,15 +267,21 @@ def write_check_page(report_dir: Path, project: str, result: CheckResult, locati
                   "<span class=\"muted\" id=\"info\"></span></div>\n"
                   "<div id=\"list\"></div>\n<button id=\"more\" type=\"button\" hidden>Show more</button>\n"
                   f"<script type=\"application/json\" id=\"data\">{data}</script>\n"
-                  f"<script>const PAGE = {PAGE_SIZE};{SCRIPT}</script>")
+                  f"<script>const PAGE = {PAGE_SIZE}; const LINK = {_link_json(link)};{SCRIPT}</script>")
     path = report_dir / HTML_FOLDER / f"{result.name}.html"
     path.write_text(_page(f"{result.name} - {project}", body), encoding="utf-8")
     return path
 
 
-def write_html_report(report_dir: Path, project: str, results: list[CheckResult], location_help: str) -> Path:
+def _link_json(link: dict[str, str] | None) -> str:
+    data = {"protocol": PROTOCOL, "project": "", "vrs": "", **(link or {})}
+    return json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+
+
+def write_html_report(report_dir: Path, project: str, results: list[CheckResult], location_help: str,
+                      link: dict[str, str] | None = None) -> Path:
     """Write index.html and one page per check; returns the path of index.html."""
     (report_dir / HTML_FOLDER).mkdir(parents=True, exist_ok=True)
     for result in results:
-        write_check_page(report_dir, project, result, location_help)
+        write_check_page(report_dir, project, result, location_help, link)
     return write_index(report_dir, project, results, location_help)

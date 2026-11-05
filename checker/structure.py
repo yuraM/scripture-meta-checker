@@ -365,6 +365,11 @@ def index_book(book: str, content: str, reference_format: ReferenceFormat = Refe
     return scanner.index
 
 
-def book_name_words(content: str) -> set[str]:
-    """Lowercase words of the book's \\toc1-3 names: {"1ዜና", "1", "сам", ...}."""
-    return {word.rstrip(".").lower() for name in _BOOK_NAME_RE.findall(content) for word in name.split()}
+def book_name_words(content: str, names_only: bool = False) -> set[str]:
+    """Lowercase words of the book's \\toc1-3 names: {"1ዜና", "1", "сам", ...}.
+
+    names_only: only words written with a capital letter ("Surat Paulus kepada Jemaat di Roma" -> surat, paulus,
+    jemaat, roma; not "kepada", "di"); in scripts without capitals every word.
+    """
+    words = (word.rstrip(".").replace("~", " ") for name in _BOOK_NAME_RE.findall(content) for word in name.split())
+    return {word.lower() for word in words if word and (not names_only or not word[0].islower())}

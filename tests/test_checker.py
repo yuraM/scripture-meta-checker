@@ -162,6 +162,31 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
                          [(ERROR, "помилка"), (WARNING, "аарона"), (WARNING, "інше"), (WARNING, "Дивіться")])
         self.assertIn("Wordlist disagrees with itself", findings[-1].message)
 
+    def test_numbers(self):
+        from checker.checks import UsageCounter, check_numbers
+        self.ctx.settings = replace(self.settings, number_thousands_separator=".")
+        usfm = ("\\id TST\n\\ip У 1446 році.\n\\c 1\n\\p "
+                + " ".join(f"\\v {n} Було 4.000 воїнів." for n in range(1, 13))
+                + " \\v 13 Було 4000 воїнів і 12.000 коней, H1234.")
+        usage = UsageCounter()
+        for segment in parse_usfm(usfm, "TST"):
+            usage.add(self.ctx.analyse(segment), self.ctx)
+        findings = list(check_numbers(usage, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in findings], [("1:13", "4000")])
+        self.assertIn("12 of 13", findings[0].message)
+        self.assertIn("4000", findings[0].context)
+
+    def test_spelling_leaves_mixed_case_to_its_check(self):
+        text = "\\p Бет-Ель ен-Мішпату слово"
+        self.assertEqual([f.item for f in self.run_check("spelling", text)], ["Бет-Ель", "ен-Мішпату"])
+        # Both checks in one run: the word is shown once, by mixed-capitalization; the note says so.
+        self.ctx.checks = frozenset({"spelling", "mixed-capitalization"})
+        self.assertEqual(self.run_check("spelling", text), [])
+        self.assertIn("mixed-capitalization", self.ctx.notes["spelling"])
+        # A word marked wrong (W) stays a spelling error: it has a correction.
+        self.ctx.spelling.entries["бет-ель"] = SpellingEntry("бет-ель", "W", (), ("Бет-Эль",))
+        self.assertEqual([(f.severity, f.item) for f in self.run_check("spelling", text)], [(ERROR, "Бет-Ель")])
+
     def test_repeated_words(self):
         findings = self.run_check("repeated-words", "\\p слово слово, так так і і Слово слово. слово")
         self.assertEqual([(f.severity, f.item) for f in findings],
@@ -352,6 +377,24 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertEqual([_name_to_book(n, usage, ctx) for n in ("См. Исх.", "см. также Пс.", "1~Цар.", "См.",
                                                                  "см. сноску к")], ["EXO", "PSA", "1SA", "", None])
 
+    def test_special_spaces(self):
+        n = " "
+        fmt = ReferenceFormat(chapter_verse=":", verse_sequences=(f",{n}", " и "), chapter_sequences=("; ",))
+        settings = replace(self.settings, reference_format=fmt, number_thousands_separator=n,
+                           quote_levels=(("«", "»"), ("„", "“")), abbreviations=frozenset({"н.~э.", "ст."}))
+        ctx = CheckContext(settings, self.spelling)
+        content = (f"\\id TST\n\\rem до н. э. «{n}x\n\\c 1\n\\p \\v 1 «Він сказав: „Так“{n}» і 50{n}000 людей "
+                   f"\\wj „слово“\\wj*{n}»\\f + \\fr 1:1 \\ft \\fv 1{n}\\fv*\\fqa а \\fv 2\\fv* б ст.~8,{n}9 і ст.~7, 11 "
+                   f"\\xt ст.~1, 2\\xt*\\f*\n\\v 2 до н.{n}э. і до н. э. та То{n}есть")
+        found = [(f.ref, f.item) for f in SOURCE_CHECKS["special-spaces"]("TST", content, ctx)]
+        self.assertEqual(found, [
+            ("1:1", "\\fv"),            # "\fv 2\fv* б": no U+202F before \fv*, a space after it
+            ("1:2", "н.~э."),           # a narrow no-break space in an abbreviation written with ~
+            ("1:2", f"То{n}есть"),      # a narrow no-break space between two words
+            ("1:2", "н.~э."),           # the abbreviation with a normal space
+            ("1:1", "ст.~7, 11"),       # ", " is not a SequenceIndicator mark (the \xt is left to `references`)
+        ])
+
     def test_naming_settings(self):
         path = self.root / "Naming.xml"
         path.write_text('<ScriptureText><Naming PrePart="x" PostPart="y.SFM" BookNameForm="MAT" /></ScriptureText>',
@@ -390,8 +433,8 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
     def test_spelling_suggestion(self):
         findings = self.run_check("spelling", "\\p слвоо сліво")
         self.assertEqual([f.message for f in findings],
-                         ["word is not approved in Wordlist: 'слвоо' (similar approved words: слово)",
-                          "word is not approved in Wordlist: 'сліво' (similar approved words: слово)"])
+                         ["word is not approved in Wordlist: 'слвоо' (similar approved words: 'слово')",
+                          "word is not approved in Wordlist: 'сліво' (similar approved words: 'слово')"])
 
     def test_name_case_and_styled_words(self):
         usage = UsageCounter()
@@ -790,6 +833,30 @@ class ReportTest(unittest.TestCase):
         from checker.cli import CHECK_DESCRIPTIONS
         self.assertEqual(set(CHECK_DESCRIPTIONS), {*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS, *PROJECT_CHECKS})
 
+    def test_every_check_is_in_one_stage(self):
+        from checker.checks import PROJECT_CHECKS
+        from checker.stages import STAGES, in_stage_order, stage_checks
+        staged = [name for _, names in STAGES for name in names]
+        self.assertEqual(sorted(staged), sorted({*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS, *PROJECT_CHECKS}))
+        self.assertEqual(in_stage_order(["unused", "spelling", "lists", "spelling"]), ["lists", "spelling", "unused"])
+        self.assertEqual(stage_checks([2]), list(STAGES[1][1]))
+
+    def test_stage_option(self):
+        from checker.cli import build_parser
+        args = build_parser().parse_args(["X", "--stage", "1", "--checks", "pairs"])
+        self.assertEqual((args.stage, args.checks), ([1], ["pairs"]))
+
+    def test_index_by_stage(self):
+        from checker.html_report import CheckResult, write_index
+        results = [CheckResult("usfm", "", errors=3), CheckResult("spelling", "", warnings=1)]
+        with tempfile.TemporaryDirectory() as folder:
+            index = write_index(Path(folder), "TST", results, "").read_text(encoding="utf-8")
+            self.assertLess(index.index("Stage 2. File structure"), index.index("Stage 4. Words"))
+            self.assertIn("Fix them first", index)
+            # Only early stages checked: nothing later to warn about.
+            index = write_index(Path(folder), "TST", results[:1], "").read_text(encoding="utf-8")
+            self.assertNotIn("Fix them first", index)
+
     def test_html_report(self):
         import json
         import re
@@ -798,16 +865,24 @@ class ReportTest(unittest.TestCase):
         findings = [Finding("MAT", "1:1", ERROR, "spelling", "x", "word '<x>'", "a </script> b"),
                     Finding("MAT", "1:2", ERROR, "spelling", "x", "word '<x>'", "")]
         with tempfile.TemporaryDirectory() as folder:
+            from checker.cli import latest_run, new_run_folder
             report_dir = Path(folder) / "TST_report"
-            report_dir.mkdir()
-            (report_dir / "spelling.txt").write_text("old report", encoding="utf-8")  # layout of older versions
+            (report_dir / "txt").mkdir(parents=True)
+            (report_dir / "spelling.txt").write_text("old report", encoding="utf-8")  # layouts of older versions
+            (report_dir / "txt" / "spelling.txt").write_text("old report", encoding="utf-8")
             (report_dir / "notes.txt").write_text("a file of the user", encoding="utf-8")
-            results = write_reports(Path(folder) / "TST", findings, ["spelling", "pairs"], report_dir, True,
+            first = new_run_folder(report_dir)
+            write_reports(Path(folder) / "TST", findings, ["spelling"], first, True, {})
+            run = new_run_folder(report_dir)  # the same minute: "<date>_<time>_2"
+            results = write_reports(Path(folder) / "TST", findings, ["spelling", "pairs"], run, True,
                                     {"pairs": "Not checked: test."})
-            index = (report_dir / "index.html").read_text(encoding="utf-8")
-            page = (report_dir / "html" / "spelling.html").read_text(encoding="utf-8")
-            self.assertTrue((report_dir / "txt" / "spelling.txt").exists())
-            self.assertEqual(sorted(p.name for p in report_dir.iterdir()), ["html", "index.html", "notes.txt", "txt"])
+            self.assertEqual(latest_run(report_dir), run)
+            self.assertTrue(run.name.startswith(first.name) and run.name.endswith("_2"))
+            index = (run / "index.html").read_text(encoding="utf-8")
+            page = (run / "html" / "spelling.html").read_text(encoding="utf-8")
+            self.assertTrue((run / "txt" / "spelling.txt").exists())
+            self.assertEqual(sorted(p.name for p in report_dir.iterdir()), sorted([first.name, run.name, "notes.txt"]))
+            self.assertEqual(sorted(p.name for p in run.iterdir()), ["html", "index.html", "txt"])
         self.assertEqual([(r.name, r.errors, len(r.problems)) for r in results], [("spelling", 2, 1), ("pairs", 0, 0)])
         self.assertIn('href="html/spelling.html"', index)
         self.assertIn('href="txt/spelling.txt"', index)
@@ -819,6 +894,39 @@ class ReportTest(unittest.TestCase):
         data = re.search(r'id="data">(.*?)</script>', page, re.S).group(1)
         self.assertEqual(json.loads(data)[0]["where"], "MAT 1:1, 1:2")
         self.assertEqual(json.loads(data)[0]["context"], "a </script> b")
+
+
+class ParatextLinkTest(unittest.TestCase):
+    def test_link_round_trip(self):
+        from checker.paratext_link import make_link, parse_link
+        link = make_link("ab c", "1JN 5:8", "4")
+        self.assertEqual(link, "scripturechecker:ab%20c/1JN%205:8?vrs=4")
+        self.assertEqual(parse_link(link), ("ab c", "1JN 5:8", "4"))
+        # Browsers may add a slash; the JavaScript of the page encodes the same way.
+        self.assertEqual(parse_link("scripturechecker://P/MAT%205:3/"), ("P", "MAT 5:3", ""))
+        self.assertIsNone(parse_link("scripturechecker:P/hyphenatedWords.txt"))
+        self.assertIsNone(parse_link("https://example.org"))
+
+    def test_window_title(self):
+        from checker.paratext_link import shows, window_reference
+        self.assertEqual(window_reference("abc: 1JN 5:8 (Standard Translation)"), ("abc", "1JN 5:8"))
+        self.assertIsNone(window_reference("Paratext 9.5"))
+        self.assertTrue(shows("MAT 5:1", "MAT 5:0"))
+        self.assertFalse(shows("MAT 5:2", "MAT 5:3"))
+
+    def test_original_versification(self):
+        from checker.paratext_link import english_reference
+        self.assertEqual(english_reference("PSA 51:3", "1"), "PSA 51:1")
+        self.assertIsNone(english_reference("PSA 51:3", "4"))
+
+    def test_links_in_the_page(self):
+        from checker.html_report import CheckResult, Problem, write_check_page
+        result = CheckResult("spelling", "", 1, 0, "", [Problem("error", "m", 1, "", "MAT 5:3", "x")])
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / "html").mkdir()
+            page = write_check_page(Path(folder), "P", result, "", {"project": "Abc", "vrs": "4"})
+            text = page.read_text(encoding="utf-8")
+        self.assertIn('const LINK = {"protocol": "scripturechecker", "project": "Abc", "vrs": "4"}', text)
 
 
 class WindowTest(unittest.TestCase):
@@ -833,6 +941,25 @@ class WindowTest(unittest.TestCase):
             self.assertNotIn(paratext.resolve(), default_report_dir(paratext / "ABC", paratext).resolve().parents)
             other = Path(folder) / "copy" / "ABC"
             self.assertEqual(default_report_dir(other, paratext), Path(folder) / "copy" / "ABC_report")
+
+    def test_nothing_selected_at_start(self):
+        from tkinter import TclError, Tk
+        from checker.gui import CheckerWindow
+        try:
+            root = Tk()
+        except TclError:
+            self.skipTest("no display")
+        try:
+            root.withdraw()
+            window = CheckerWindow(root)
+            self.assertFalse(any(var.get() for var in window.selected.values()))
+            self.assertEqual(str(window.run_button.cget("state")), "disabled")
+            window.selected["spelling"].set(True)
+            self.assertEqual(str(window.run_button.cget("state")), "normal")
+            window.selected["spelling"].set(False)
+            self.assertEqual(str(window.run_button.cget("state")), "disabled")
+        finally:
+            root.destroy()
 
 
 if __name__ == "__main__":

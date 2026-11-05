@@ -17,6 +17,7 @@ from checker.references import ReferencePart, parse_reference
 from checker.settings import ReferenceFormat
 from checker.spelling import STATE_RIGHT, STATE_WRONG
 from checker.books import book_from_file_name
+from checker.spaces import check_special_spaces
 from checker.terms import check_term_lists, check_terms
 from checker.structure import (
     PERIPHERAL_BOOKS, XtReference, check_book_titles, check_file, check_structure, index_book, verse_range,
@@ -111,18 +112,35 @@ def _is_approved_form(word: str, ctx: CheckContext) -> bool:
     return bool(entry) and entry.state == STATE_RIGHT and (word == entry.word or word in entry.specific_cases)
 
 
+def _mixed_case_problem(word: str, ctx: CheckContext) -> bool:
+    """check_mixed_capitalization reports `word` (an error or a warning)."""
+    return (_is_mixed_case(word) and not any(ch.isdigit() for ch in word)
+            and (word in ctx.settings.invalid_mixed_capitalization or not _is_approved_form(word, ctx)))
+
+
+def _spelling_note(ctx: CheckContext) -> None:
+    parts = []
+    if ctx.skipped_book_words:
+        parts.append(f"Not checked: {len(ctx.skipped_book_words)} words of book names (\\toc1-3), "
+                     f"e.g. {', '.join(sorted(ctx.skipped_book_words)[:8])}.")
+    if ctx.mixed_case_words:
+        count = len(ctx.mixed_case_words)
+        parts.append(f"Not listed here: {count} {'word' if count == 1 else 'words'} with a capital letter inside, "
+                     f"e.g. {', '.join(sorted(ctx.mixed_case_words)[:8])}. They are in the report mixed-capitalization.")
+    ctx.notes["spelling"] = " ".join(parts)
+
+
 def check_mixed_capitalization(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:
     # Settings.xml ValidMixedCapitalization is outdated and deliberately ignored;
     # SpellingStatus.xml decides which mixed-case forms are valid.
-    invalid = ctx.settings.invalid_mixed_capitalization
     for word in analysis.words:
         # Words with digits are references/abbreviations such as "1Sa", not mixed capitalization.
-        if not _is_mixed_case(word.text) or any(ch.isdigit() for ch in word.text):
+        if not _mixed_case_problem(word.text, ctx):
             continue
-        if word.text in invalid:
+        if word.text in ctx.settings.invalid_mixed_capitalization:
             yield analysis.finding(word.start, len(word.text), ERROR, "mixed-capitalization", word.text,
                                    f"capital letter inside a word is not allowed: '{word.text}'")
-        elif not _is_approved_form(word.text, ctx):
+        else:
             yield analysis.finding(word.start, len(word.text), WARNING, "mixed-capitalization", word.text,
                                    f"capital letter inside a word, not approved in {places.WORDLIST}: '{word.text}'")
 
@@ -165,10 +183,23 @@ def check_spelling(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:
     for word in analysis.words:
         if any(ch.isdigit() for ch in word.text):
             continue
+        # Words of book names (\toc1-3) are set by the project itself; a W mark on one is reported once by `lists`.
+        if word.text.lower() in ctx.book_title_words:
+            if word.text.lower() not in ctx.skipped_book_words:
+                ctx.skipped_book_words.add(word.text.lower())
+                _spelling_note(ctx)
+            continue
         entry = ctx.spelling.lookup(word.text)
+        # A capital inside the word: mixed-capitalization shows it, unless the list marks the word wrong (W).
+        if ("mixed-capitalization" in ctx.checks and (entry is None or entry.state != STATE_WRONG)
+                and _mixed_case_problem(word.text, ctx)):
+            if word.text not in ctx.mixed_case_words:
+                ctx.mixed_case_words.add(word.text)
+                _spelling_note(ctx)
+            continue
         if entry is None:
             similar = ctx.spelling.similar(word.text)
-            hint = f" (similar approved words: {', '.join(similar)})" if similar else ""
+            hint = f" (similar approved words: {', '.join(f"'{w}'" for w in similar)})" if similar else ""
             yield analysis.finding(word.start, len(word.text), WARNING, "spelling", word.text,
                                    f"word is not approved in {places.WORDLIST}: '{word.text}'{hint}")
         elif entry.state == STATE_WRONG and (lowercase := ctx.spelling.entries.get(word.text.lower())) \
@@ -179,7 +210,7 @@ def check_spelling(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:
                                    f"{places.WORDLIST} disagrees with itself: '{entry.word}' is wrong (W), "
                                    f"'{lowercase.word}' is right (R)")
         elif entry.state == STATE_WRONG:
-            suggestion = f" (use: {', '.join(entry.corrections)})" if entry.corrections else ""
+            suggestion = f" (use: {', '.join(f"'{c}'" for c in entry.corrections)})" if entry.corrections else ""
             yield analysis.finding(word.start, len(word.text), ERROR, "spelling", word.text,
                                    f"word is marked wrong in {places.WORDLIST}: '{word.text}'{suggestion}")
         elif entry.state != STATE_RIGHT:
@@ -197,7 +228,7 @@ def check_spelling(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:
             # so a different case is only suspicious, not necessarily wrong.
             yield analysis.finding(word.start, len(word.text), WARNING, "spelling", word.text,
                                    f"capital or small letters are different: '{word.text}', {places.WORDLIST} has: "
-                                   f"{' / '.join(entry.specific_cases)}")
+                                   f"{' / '.join(f"'{c}'" for c in entry.specific_cases)}")
 
 
 def check_repeated_words(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:
@@ -221,6 +252,32 @@ def _codes(text: str) -> str:
     return " + ".join(f"U+{ord(ch):04X}" for ch in text)
 
 
+def _separator_text(separator: str) -> str:
+    return _codes(separator) if separator.isspace() else f"'{separator}'"
+
+
+def _numbers(text: str, ctx: CheckContext) -> Iterator[re.Match]:
+    """Numbers of the text, with the thousands separator inside them ("10 000"). Not the digits after a reference
+    or fraction mark ("3:16", "1,5"): they belong to the number before."""
+    separator = ctx.settings.number_thousands_separator
+    not_after = ctx.settings.number_medial_punctuation - {separator}
+    for match in re.finditer(rf"\d+(?:{re.escape(separator)}\d+)*", text):
+        start = match.start()
+        if start >= 2 and text[start - 2].isdigit() and (text[start - 1] in not_after or text[start - 1].isspace()):
+            continue
+        yield match
+
+
+def four_digit_form(number: str, separator: str) -> bool | None:
+    """True = "4 000" (with the separator), False = "4000", None = not a 4-digit number."""
+    groups = number.split(separator)
+    if len(groups) == 1 and len(number) == 4:
+        return False
+    if len(groups) == 2 and len(groups[0]) == 1 and len(groups[1]) == 3:
+        return True
+    return None
+
+
 def check_spacing(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:
     """Double spaces and thousands separators in numbers (NumberThousandsSeparator)."""
     text = analysis.segment.text
@@ -231,13 +288,9 @@ def check_spacing(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:
     separator = ctx.settings.number_thousands_separator
     if not separator:
         return
-    shown = _codes(separator) if separator.isspace() else f"'{separator}'"
-    # Digits right after these belong to a reference or a fraction ("3:16", "1,5"), not to a new number.
-    not_after = ctx.settings.number_medial_punctuation - {separator}
-    for match in re.finditer(rf"\d+(?:{re.escape(separator)}\d+)*", text):
+    shown = _separator_text(separator)
+    for match in _numbers(text, ctx):
         number, start = match.group(), match.start()
-        if start >= 2 and text[start - 2].isdigit() and (text[start - 1] in not_after or text[start - 1].isspace()):
-            continue
         groups = number.split(separator)
         if len(groups) == 1 and len(number) >= MIN_SEPARATED_DIGITS:
             yield analysis.finding(start, len(number), WARNING, "spacing", "no thousands separator",
@@ -379,6 +432,25 @@ class UsageCounter:
         self.note_references: list[XtReference] = []
         # (book, chapter, verse) -> scripture text of the verse: no notes, no headings ("6-7" fills both verses).
         self.verse_texts: dict[tuple[str, int, int], str] = {}
+        # 4-digit numbers of the text (not introductions): written with / without the thousands separator,
+        # each as (book, chapter:verse, number, context).
+        self.four_digit: tuple[list[tuple[str, str, str, str]], list[tuple[str, str, str, str]]] = ([], [])
+
+    def _add_numbers(self, analysis: Analysis, ctx: CheckContext) -> None:
+        separator = ctx.settings.number_thousands_separator
+        if not separator:
+            return
+        text = analysis.segment.text
+        for match in _numbers(text, ctx):
+            start, end = match.start(), match.end()
+            ref = analysis.segment.ref_at(start)
+            # Introductions and front matter are full of years (1446, 2011); "H1234" is a code, not a number.
+            if ref.startswith("0:") or (start and text[start - 1].isalpha()) or (end < len(text) and text[end].isalpha()):
+                continue
+            form = four_digit_form(match.group(), separator)
+            if form is not None:
+                context = analysis.finding(start, end - start, WARNING, "", "", "").context
+                self.four_digit[form].append((analysis.segment.book, ref, match.group(), context))
 
     def _add_verse_texts(self, analysis: Analysis) -> None:
         segment = analysis.segment
@@ -442,6 +514,7 @@ class UsageCounter:
                 self.first_seen[key] = (segment.book, segment.ref_at(word.start))
         if ctx:
             self._add_case_and_styles(analysis, ctx)
+            self._add_numbers(analysis, ctx)
             ending = paragraph_ending(segment, ctx)
             if ending and not HEADING_STYLE_RE.match(segment.style):
                 self.paragraph_endings[ending[0]] += 1
@@ -617,6 +690,29 @@ def check_name_case(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]
                           f"{len(majority) + len(minority)})", "")
 
 
+MIN_USUAL_NUMBERS = 10  # the usual way of writing 4-digit numbers is used at least this often
+MAX_RARE_SHARE = 0.1  # and the other way in at most this part of the 4-digit numbers
+
+
+def check_numbers(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
+    """4-digit numbers written in the rare way of the project: "4000" where 118 others are "4.000", or the reverse.
+    Settings.xml does not say how 4-digit numbers are written, so the text decides."""
+    plain, separated = usage.four_digit
+    total = len(plain) + len(separated)
+    if not total:
+        return
+    for rare, usual, has_separator in ((plain, separated, False), (separated, plain, True)):
+        if not rare or len(usual) < MIN_USUAL_NUMBERS or len(rare) > total * MAX_RARE_SHARE:
+            continue
+        shown = _separator_text(ctx.settings.number_thousands_separator)
+        example = Counter(number for _, _, number, _ in usual).most_common(1)[0][0]
+        for book, ref, number, context in rare:
+            how = "has the thousands separator" if has_separator else f"has no thousands separator {shown}"
+            yield Finding(book, ref, WARNING, "numbers", number,
+                          f"number '{number}' {how}, but {len(usual)} of {total} numbers with 4 digits are "
+                          f"written like '{example}'. Is it a year?", context)
+
+
 def check_styled_words(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
     """A word nearly always inside a character style (\\nd) but sometimes not, or the other way round."""
     for (marker, key), (inside, outside) in sorted(usage.style_refs.items()):
@@ -765,6 +861,9 @@ def check_lists(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
             target = ctx.spelling.lookup(correction)
             if target and target.state == STATE_WRONG:
                 yield _spelling_finding(ERROR, key, f"the correction '{correction}' of '{key}' is also marked as wrong (W)")
+        if entry.state == STATE_WRONG and key.lower() in ctx.book_title_words:
+            yield _spelling_finding(WARNING, key, f"'{key}' is marked wrong (W), but it is a word of a book name "
+                                                  f"(\\toc1-3): change the {places.WORDLIST} or the book name")
     for word in sorted(ctx.settings.invalid_mixed_capitalization):
         entry = ctx.spelling.lookup(word)
         if entry and entry.state == STATE_RIGHT and word in (entry.word, *entry.specific_cases):
@@ -811,6 +910,7 @@ def check_usfm(book: str, content: str, ctx: CheckContext, file_name: str = "") 
 SOURCE_CHECKS: dict[str, Callable[..., Iterator[Finding]]] = {
     "usfm": check_usfm,
     "book-titles": lambda book, content, ctx, file_name="": check_book_titles(book, content),
+    "special-spaces": lambda book, content, ctx, file_name="": check_special_spaces(book, content, ctx),
 }
 # Checks that run once after all books were read.
 PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Finding]]] = {
@@ -821,6 +921,7 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "variants": check_variants,
     "name-case": check_name_case,
     "styled-words": check_styled_words,
+    "numbers": check_numbers,
     "references": check_references,
     "parallel-changes": check_parallel_changes,
     "parallel-differences": check_parallel_differences,

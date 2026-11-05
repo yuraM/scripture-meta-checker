@@ -25,12 +25,14 @@ CHECKS = [
     "pairs",                 # Pairs: ( ) [ ] { } unclosed or mismatched
     "repeated-words",        # "і і"; RepeatableWords / NonRepeatableWords
     "spacing",               # double spaces, thousands separator in numbers
+    "numbers",               # 4-digit numbers written in the rare way of the project (4000 among 4.000)
     "scripts",               # words mixing scripts (Latin "c" in a Cyrillic word)
     "normalization",         # NormalizationForm (NFC)
     "paragraph-final",       # last punctuation of a paragraph; headings ending with "."
     "ordinals",              # NumberOrdinals: "5-го", "8th", "ke-430"
     "usfm",                  # unclosed markers and notes, chapter/verse numbering, empty verses, \fr vs verse
     "book-titles",           # \toc1 = \mt2 + \mt1, \toc2 = \h
+    "special-spaces",        # narrow no-break space U+202F, "\fv 13 \fv*", н.~э., marks in verse lists
     "hyphenation",           # hyphenatedWords.txt: rules, consistency, missing words
     "lists",                 # contradictions between SpellingStatus, Settings and hyphenation lists
     "approvals",             # approved list entries that look wrong; rejected ones used very often

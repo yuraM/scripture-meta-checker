@@ -71,7 +71,7 @@ New checks are agreed with the user first — see "Ideas / not implemented".
 
 The user runs `main.py` from PyCharm **without arguments**: the settings block at the top of
 `main.py` (`PROJECT`, `CHECKS` — comment out unwanted lines, `BOOKS`, `LANGUAGE`, `REPORT_DIR`,
-`UNIQUE`, `ERRORS_ONLY`) is turned into CLI arguments. Default: all checks, one report per check in `<project>_report/`,
+`UNIQUE`, `ERRORS_ONLY`) is turned into CLI arguments. Default: all checks, one report per check in a new run folder `<project>_report/YYYY-MM-DD_HH-MM/`,
 a one-line-per-check summary in the console. When adding a check, add it to
 `CHECKS` in `main.py` too. Command line arguments, if given, replace the settings block:
 
@@ -83,6 +83,7 @@ a one-line-per-check summary in the console. When adding a check, add it to
 .venv/Scripts/python.exe main.py PROJECT --errors-only --output report.txt
 .venv/Scripts/python.exe main.py PROJECT --checks unused --output unused.txt   # list entries absent from text
 .venv/Scripts/python.exe main.py PROJECT --checks all --report-dir PROJECT_report  # index.html + html/ + txt/ (one file per check)
+.venv/Scripts/python.exe main.py PROJECT --stage 1 2 --report-dir PROJECT_report  # all checks of stages 1 and 2 (also with --checks)
 .venv/Scripts/python.exe main.py PROJECT --checks hyphenation --language xx    # force generic (no language profile)
 .venv/Scripts/python.exe main.py D:/Projects/OtherProject              # a Paratext project folder anywhere
 .venv/Scripts/python.exe -m unittest                  # tests
@@ -96,7 +97,17 @@ project (listed from the Paratext projects folder, found in the registry `Settin
 of the folder at the start; a click on a book selects/clears it; a group button — Old/New Testament, Deuterocanon,
 Extra material, groups in `checker/books.py` — selects only its group when all books are selected, adds it otherwise,
 clears it when it is already selected; all selected = no `--books`), tick checks, Run (background thread, progress bar), the HTML report opens
-in the browser. Reports of a project inside the Paratext folder go to `Documents/Scripture checker reports/
+in the browser.
+Checks are shown by **stage** (user decision, 2026-11-05; `checker/stages.py`, the order to fix problems: an earlier
+stage causes false problems in later ones): 1 Project settings and lists, 2 File structure, 3 Characters and
+punctuation, 4 Words, 5 References and terms, 6 Review lists. Select all / Clear all (in the frame title) and
+All/None per stage; the 6 stage boxes stand in one row and the progress bar is in the Run row, so the window is
+about 750 px high with a project (user wish: fit small screens). Nothing is
+selected when the window opens and Run is disabled until a check is ticked; the choice stays while the window is open
+(not saved). Reports always list checks in stage order; `index.html` has a heading per stage and, when stage 1-2 has
+errors and later stages were checked, a line "Fix them first". Measured on 9 projects to place the checks:
+`lists` -> `spelling` (W/R contradictions), `spelling` -> `hyphenation` (3.6k missing words are also unapproved),
+`spelling` -> `variants`/`parallel-changes`. Reports of a project inside the Paratext folder go to `Documents/Scripture checker reports/
 <project>_report` (never write into the Paratext folder); other projects keep `<project folder>_report`.
 `build_exe.bat` builds `dist/checker.exe` with PyInstaller (build-only dependency, approved 2026-11-02; `build/` and
 `dist/` are build output).
@@ -118,6 +129,7 @@ wordlist/
 │   ├── books.py         # Paratext book numbers; book code from a file name (Settings.xml Naming)
 │   ├── tokens.py        # word runs / punctuation runs / joined words / graphemes
 │   ├── model.py         # Finding, Analysis, CheckContext, ERROR/WARNING
+│   ├── stages.py        # STAGES: the checks in the order to fix their problems (window, reports, --stage)
 │   ├── checks.py        # the checks; registries CHECKS / BOOK_CHECKS / SOURCE_CHECKS / PROJECT_CHECKS
 │   ├── quotes.py        # quotation mark check (book level)
 │   ├── pairs.py         # matched pairs ( ) [ ] check (book level)
@@ -130,8 +142,10 @@ wordlist/
 │   ├── structure.py     # USFM structure: markers, notes, chapter/verse numbers (raw file)
 │   ├── places.py        # names of Paratext windows/menus used in report texts
 │   ├── approvals.py     # approvals check: approved list entries that look wrong
+│   ├── spaces.py        # special-spaces check: U+202F, \fv … \fv*, abbreviations with ~ (raw file)
 │   ├── html_report.py   # HTML report: index.html + one page per check (static, inline CSS/JS)
 │   ├── gui.py           # tkinter window: choose project and checks, run, open the report
+│   ├── paratext_link.py # report links (scripturechecker:...) -> Paratext shows the verse; URL protocol registration
 │   ├── icon.ico         # window and exe icon (16-256 px, transparent corners), made from `Open Book Icon.png` in the root
 │   └── cli.py           # argparse, report writer, summary
 ├── tests/test_checker.py
@@ -205,17 +219,19 @@ wordlist/
 | `punctuation` | ValidPunctuation / InvalidPunctuation | pattern is invalid | pattern not listed |
 | `mixed-capitalization` | SpellingStatus.xml + InvalidMixedCapitalization | word in InvalidMixedCapitalization | mixed-case form not approved in SpellingStatus (R entry with this exact key or `SpecificCase`) |
 | `capitalization` | SentenceFinalPunctuation, ValidSentenceFinalPunctCapitalization, Abbreviations, InvalidUncapitalizedStyles | — | lowercase after sentence end (unless the sequence is allowed or the previous word is an abbreviation); `\p` starting lowercase |
-| `spelling` | SpellingStatus.xml | word has `State="W"` (shows `<Correction>`) | word not in list (with up to 3 approved words one edit away: `(similar approved words: слово)`); case differs from `<SpecificCase>` |
+| `spelling` | SpellingStatus.xml | word has `State="W"` (shows `<Correction>`) | word not in list (with up to 3 approved words one edit away: `(similar approved words: слово)`); case differs from `<SpecificCase>`; capitalized words of `\toc1-3` book names are skipped (named in the report note) |
 | `quotes` | Quotes / InnerQuotes / InnerInnerQuotes, ContinueQuotes, Continuer…, ContinueAt, QuoteClosesAllQuoteLevels | new quote opened while the same mark is open (forgot to close); mark of the wrong level; closing mark that closes an outer quote while an inner one is open; closing mark without opening; quote never closed | paragraph that should continue an open quote (ContinueAt) lacks the continuer; any of the error cases inside a note |
 | `pairs` | Pairs (`(/) [/] {/}`), UnmatchedPairingCharacters | closing without opening; inner pair not closed before the outer closer; never closed (book-level stack like `quotes`) | the same for characters listed in UnmatchedPairingCharacters |
 | `repeated-words` | RepeatableWords / NonRepeatableWords | repeated word listed in NonRepeatableWords | same word twice separated by whitespace only (case-insensitive), not in RepeatableWords |
 | `spacing` | NumberThousandsSeparator, NumberMedialPunctuation | — | double whitespace; number with ≥5 digits without separator; groups after the separator ≠ 3 digits; `10 000` with another space than the separator |
+| `numbers` (opt-in) | text + NumberThousandsSeparator | — | 4-digit number written the rare way of the project: `4000` where ≥10 others and ≥90% have the separator (`4.000`), or the reverse; introductions (`0:…`, years) and numbers joined to letters (`H1234`) are not counted (added 2026-11-05, user decision; measured on 10 projects: 3 findings, one of them a year in a note) |
 | `scripts` | Unicode script names | word mixes scripts (`cлово`, `VІ` with Cyrillic `І`) | — |
 | `normalization` | NormalizationForm | text run not in NFC/NFD/... | — |
 | `paragraph-final` | Valid/InvalidParagraphFinalPunctuationItems, MarkersRequiringSentenceFinalPunctuation | item (`<style>_<punct>` or `<style>` = ends with a word) is invalid | required marker without sentence-final punct; item not listed although the style has listed items (poetry/list styles `q* li* lh lf lim*` excepted); heading `\s#`/`\ms#` ending with a full stop / comma / colon (by Unicode name; `?` `!` allowed) unless listed |
 | `usfm` | raw *.SFM + Naming | second `\id` in a file; file name of another book than `\id`; book in two files; closing marker without opening; marker / note not closed; chapter out of order or missing; verse out of order or duplicated; `\fr`/`\xo` reference (`14:5–6`, `11:12,13`) does not include the verse the note is in | verse numbers missing (versification may omit verses); verse without text (only a note / `\vp`; headings do not count, `\d` does) |
 | `book-titles` | `\toc1`, `\toc2`, `\h`, `\mt#` before `\c 1` | — | `\toc1` is not all `\mt#` lines joined in file order (`\mt2 Друга книга` + `\mt1 Самуїла`; some projects put `\mt1` first); main title empty; `\toc2` is not `\h` |
-| `lists` (opt-in) | SpellingStatus.xml, Settings.xml, hyphenatedWords.txt | correction of a W word is itself W | `Дивіться` W vs `дивіться` R; SpecificCase with other letters; R entry with a correction; InvalidMixedCapitalization word approved in SpellingStatus; hyphenated word marked W |
+| `special-spaces` | raw *.SFM + Quotes, NumberThousandsSeparator, SequenceIndicator (and other reference marks), Abbreviations | `\fv` not written `\fv 13<U+202F>\fv*Text` (narrow no-break space before `\fv*`, nothing after it); U+202F anywhere else except between two quotation marks (markers and notes between them do not count), between digits when it is the thousands separator, in a reference mark before a number; abbreviation listed with `~` (`н.~э.`) written with an ordinary space (or with U+202F: the message gives the `~` form); list of numbers after an abbreviation (`ст.~8, 9`) with a mark that is not in SequenceIndicator (outside `\xt`) | — |
+| `lists` (opt-in) | SpellingStatus.xml, Settings.xml, hyphenatedWords.txt | correction of a W word is itself W | `Дивіться` W vs `дивіться` R; SpecificCase with other letters; R entry with a correction; InvalidMixedCapitalization word approved in SpellingStatus; hyphenated word marked W; W word that is a word of a book name (`\toc1-3`) |
 | `approvals` (opt-in) | Settings.xml, SpellingStatus.xml, hyphenatedWords.txt, ParallelPassageStatus.xml + text counts | — | approved character that is private use / control / not Unicode; approved punctuation with a space before `, . ; : ? !` (by Unicode name) or one mark written twice (`,,`), only if used; rejected paragraph ending used ≥20× and in ≥10% of the paragraphs of its marker (`q2_,` 1742 of 12433); rejected punctuation or character used ≥20×; bare marks in ValidSentenceFinalPunctCapitalization (text with capitals only); no NormalizationForm; R word mixing scripts or with a special character; one line per character marked wrong but in R words; hyphenation entry with `*` breaking a rule; ≥99% of ≥100 parallel passages approved |
 | `variants` (opt-in) | text frequencies | — | name (never lowercase in text, ≥5 letters; in scripts without capitals every word) occurring ≤3× one edit (substitution, insertion, transposition) away from one ≥10× more frequent; edits in the last 2 letters are skipped (inflection), without capitals also edits in the first letter (prefixes) |
 | `ordinals` | NumberOrdinals, NumberOrdinalType, `\toc1-3` | — | number + affix not in NumberOrdinals (`8-ого`); uppercase affixes (`1Sa`), words of book names (`1ዜና`) and verse parts after a reference (`22:43б`) are skipped |
@@ -254,7 +270,7 @@ book in order, because a quote may span paragraphs and chapters. Design:
 - Notes quote fragments of the text (`Or “I have been given … to`): no level check, all findings
   are warnings marked "(in a footnote)".
 
-`unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `references`, `parallel-changes`,
+`unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `numbers`, `references`, `parallel-changes`,
 `parallel-differences`, `terms` and `term-lists` are project-level checks (`PROJECT_CHECKS`): they run once after
 all books, using `UsageCounter`. They are not in the default run (`unused` ≈22k findings,
 mostly SpellingStatus `R` words and hyphenation entries) and must be requested with
@@ -273,6 +289,20 @@ Design decisions:
 - Not checked as text: `\id`, `\rem`, `\c`/`\v` numbers, note callers, `\fr`, `\xo`, `\fv`, `\fig`,
   `\cat ...\cat*` (USFM 3 category, e.g. `dup`).
 - Words containing digits (`1Sa`, `2Ki`) are skipped by `spelling` and `mixed-capitalization`.
+- `spelling` skips words of book names (added 2026-11-03): `ctx.book_title_words` = capitalized words of all
+  `\toc1-3` (`structure.book_name_words(names_only=True)`; `Roma`, not `di`; scripts without capitals: every word;
+  `~` is a space). The project sets them itself; a W mark on one is reported once by `lists`. The skipped words are
+  named in `ctx.notes["spelling"]`.
+- `spelling` leaves a word that `mixed-capitalization` reports to that check when both run (`ctx.checks`, added
+  2026-11-05, user decision): 80% of the mixed-capitalization findings were the same word in the same verse in
+  spelling. A W word stays a spelling error (it has a correction). The count is named in `ctx.notes["spelling"]`.
+- `special-spaces` (`checker/spaces.py`, `SOURCE_CHECKS`, added 2026-11-03) works on the raw file, because `\fv` and
+  the markers between two quotes are needed. The `\fv` form comes from the updated typesetting documentation (user
+  decision). All findings are errors. `\id`/`\rem` lines are skipped; lists inside `\xt` are left to `references`.
+- Messages put what was found in single quotes (`'слово'`, renderings `'a' || 'b'`): the HTML report shows each
+  quoted part as a chip (dark background, copied on click) and marks `Problem.item` (= `Finding.item`) in the
+  text. Invisible spaces (no-break, narrow, zero width) are highlighted, with their code point as a tooltip.
+  `CONTEXT_WIDTH` (`checker/model.py`) = 50 characters on each side.
 - `//` (USFM optional line break) is removed before parsing; ` // ` leaves one space. Removed text (`\fv 6\fv*`, `\fig`)
   does not join the spaces around it, so `spacing` reports only double spaces that are really in the file.
 - Quote marks listed in `Pairs` (`“/”`) are left to the `quotes` check: `pairs` knows no continuers or apostrophes.
@@ -384,18 +414,49 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
 
 - Indonesian `ValidSentenceFinalPunctCapitalization` contains bare `. ! ?`, which disables the
   `capitalization` check completely (0 findings); without them it finds 13 real cases
-  (`umum. dan`, `negerinya. kemudian`). Possible option: ignore bare sentence-final items. Awaiting the user's decision.
-- 4-digit numbers: Indonesian writes `4.000` 118× but `4000` in LUK 8:30 (majority-based check).
+  (`umum. dan`, `negerinya. kemudian`). Decided 2026-11-05 (user): keep it, the project chose this setting;
+  `approvals` warns that bare marks turn the check off.
 - References inside normal sentences (not `\xt`/`\fr`/`\xo`; 444 in `tir`) are not checked. Tried and removed
   (2026-10-31): nearly all findings were false. Notes use Hebrew verse numbers (`32፥1`), and common words equal book
   abbreviations (Ukrainian `як` = James, Tigrinya `ኣብ` = Obadiah).
+- **TODO (agreed 2026-11-04, not coded yet): `footnotes` (opt-in)** — footnotes built differently from similar ones,
+  no language data. "Formula" of a note = its fixed text before the first quote/reference tag (`\fq \fqa \fl \fk \xt
+  \tl …`), numbers -> `N`, plus that tag (`Букв.: \fqa`). Measured on 8 projects: 3–71 findings each, <2% of notes.
+  - error E1: formula one character or only punctuation away from one used ≥20× and ≥10× more, with the same tag
+    (`Букв:` vs `Букв.:` 335×, `Secarah harfiah` vs 424×); a changed whole word of ≤2 letters (units) is skipped.
+  - error E2: note not ending with a SentenceFinalPunctuation mark (or `…`; closing quotes/brackets skipped), only if
+    ≥99% of the notes do (`Близько 2,9 кг\f*`, `\xt …\xt*\f*` without the full stop).
+  - warning W1: same formula, quote tag swapped `\fq` <-> `\fqa` or missing, in ≤10% of its ≥12 notes (`Букв.: \fq`
+    12× vs `\fqa` 322×). Skip `\fv` (verse number inside a quote) and `\tl` (transliteration is a normal variant).
+  - warning W2: `\fqa` of ≥3 words standing word for word in the verse (should it be `\fq`?), only when the same
+    formula usually has `\fq` (`Деякі рукописи не містять слів \fqa Благословенна ти між жінками.`). Alone it is noisy
+    (alternative punctuation, both readings in the verse). `\fq` not in the verse: dropped, mostly word meanings.
+  - warning W4: formula with one other word than one used ≥5× and ≥3× more, same first word and tag (`Див. виноску
+    до` vs `Див. пояснення до`); about half are real differences of meaning, kept as a review list (user decision).
+  - Messages show the usual form and its count. Measuring scripts were temporary (not in the repo).
+- **Links to Paratext** (done 2026-11-05, `checker/paratext_link.py`): each `chapter:verse` in `Where:` of the HTML
+  pages is a link `scripturechecker:<Settings.xml Name>/MAT%205:3?vrs=<Versification>` (built in the page script;
+  chapter 0 and places without a book stay text). Windows runs `checker.exe "<link>"` (or `pythonw checker_app.py`):
+  no window; it writes the reference to `HKCU\Software\SantaFe\Focus\ScriptureReference` (default value), posts
+  `RegisterWindowMessage("SantaFeFocus")` with wParam 1 to HWND_BROADCAST (Paratext moves the windows of scroll group
+  A), brings Paratext to the front and reads the child window titles (`<project>: MAT 5:3 (Standard Translation)`) to
+  see that a window of the project moved; else a message box: Paratext not open / project not open / window in
+  another scroll group. The URL protocol is registered under `HKCU\Software\Classes\scripturechecker` (no admin
+  rights) every time the window starts, so a moved exe keeps working. Tested with Paratext 9.5 (English
+  versification project). Not known yet: whether Paratext reads the reference in the project versification or in
+  English; for an Original-versification project a second try sends the English verse (eng.vrs) when the first one
+  did not land. Other versifications: only the message. Test when such a project is open in Paratext.
+  The exe sets `PYINSTALLER_RESET_ENVIRONMENT=1` at start: a browser opened by "Open report" inherits the variables
+  of the onefile exe (`_PYI_APPLICATION_HOME_DIR` = its temporary `_MEI…` folder), and a link opened later started
+  checker.exe as a part of that old run, whose folder was gone: "Failed to load Python DLL" (found 2026-11-05).
 
 ## Coding conventions
 
 - Python 3 standard library only unless the user approves a dependency. Approved: PyInstaller, only to build the exe.
 - Use `pathlib`, type hints, small pure functions; the CLI entry point uses `argparse`.
 - A new check = a function `(Analysis, CheckContext) -> Iterator[Finding]` registered in
-  `CHECKS`, plus a test in `tests/test_checker.py`, plus a row in the table above.
+  `CHECKS`, plus a test in `tests/test_checker.py`, plus a row in the table above, plus a place in one stage of
+  `checker/stages.py` (a test fails otherwise; the planned `footnotes` goes to stage 5).
 - The project folder is a required CLI argument, with no default; `main.py` gives it from its `PROJECT` setting.
 - Report format: `CHECK: <id>`, a simple description of the check (`CHECK_DESCRIPTIONS` in `checker/cli.py`,
   add one for a new check) and the counts. With `--unique` then numbered blocks, errors first, most frequent
@@ -412,10 +473,12 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
 - Always read text as UTF-8 (`utf-8-sig`) and write output as UTF-8.
 - `--report-dir` writes `index.html` (one row per check, links to the `txt/` and `html/` folders), `html/<check>.html`
   (the grouped problems as embedded JSON, 200 blocks per page, search, errors-only filter, link to its txt) and
-  `txt/<check>.txt` (user decision, 2026-11-03: html and txt in separate folders). Old `<check>.txt/.html` files directly
-  in the folder (earlier layout) are deleted; other files there are kept. The pages need no server and no internet;
-  `</` in the JSON is escaped so problem text cannot end the script. The window has "Open report" and
-  "Open txt folder" buttons for the Reports folder (also reports of an earlier run).
+  `txt/<check>.txt` (user decision, 2026-11-03: html and txt in separate folders), all inside a new run folder
+  `<report dir>/YYYY-MM-DD_HH-MM/` (`cli.new_run_folder`; `_2`, `_3` for two runs in one minute), so earlier runs are
+  kept. Reports of the earlier layouts lying directly in the report dir (`<check>.txt/.html`, `index.html`, `txt/`,
+  `html/`) are deleted; other files there are kept. The pages need no server and no internet; `</` in the JSON is
+  escaped so problem text cannot end the script. The window has "Open report" and "Open txt folder" buttons for the
+  newest run in the Reports folder (`cli.latest_run`, also a run made earlier).
 
 ## Environment notes (Windows)
 

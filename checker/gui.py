@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import queue
+import sys
 import threading
 import traceback
 import webbrowser
@@ -14,16 +15,21 @@ from pathlib import Path
 from tkinter import BooleanVar, Button, Frame, Label, StringVar, Tk, filedialog, messagebox, ttk
 
 from checker.books import DEUTEROCANON, EXTRA_MATERIAL, NEW_TESTAMENT, OLD_TESTAMENT
-from checker.checks import PROJECT_CHECKS
-from checker.cli import CHECK_DESCRIPTIONS, TEXT_CHECKS, project_books, run_checks, write_reports
+from checker.cli import (
+    CHECK_DESCRIPTIONS, latest_run, new_run_folder, project_books, run_checks, write_reports,
+)
 from checker.html_report import TXT_FOLDER
+from checker.paratext_link import register as register_links
+from checker.stages import STAGES
 
 TITLE = "Scripture checker"
 # Usual places of the Paratext projects folder; the registry is asked first.
 PARATEXT_FOLDERS = ("C:/My Paratext 9 Projects", "C:/My Paratext 8 Projects", "D:/My Paratext 9 Projects")
 # Window and exe icon; build_exe.bat puts it next to this module inside the exe.
 ICON = Path(__file__).with_name("icon.ico")
-REPORTS_FOLDER =Path.home() / "Documents" / "Scripture checker reports"
+REPORTS_FOLDER = Path.home() / "Documents" / "Scripture checker reports"
+STAGE_COLUMNS = 6  # stage boxes per row: all in one row keeps the window low
+STAGE_WIDTH = 160  # pixels for the title of a stage box
 
 
 def paratext_folder() -> Path | None:
@@ -71,7 +77,7 @@ class CheckerWindow:
 
 
         root.title(TITLE)
-        root.minsize(760, 780)
+        root.minsize(900, 640)
         frame = ttk.Frame(root, padding=14)
         frame.grid(sticky="nsew")
         root.columnconfigure(0, weight=1)
@@ -94,48 +100,75 @@ class CheckerWindow:
         ttk.Button(frame, text="Browse...", command=self._browse_reports).grid(row=2, column=2, pady=(8, 0))
 
         self.books = BookPicker(frame)
-        self.books.grid(row=3, column=0, columnspan=3, sticky="nsew", pady=(12, 0))
+        self.books.grid(row=3, column=0, columnspan=3, sticky="nsew", pady=(8, 0))
 
-        checks = ttk.Frame(frame)
-        checks.grid(row=4, column=0, columnspan=3, sticky="nsew", pady=12)
+        # The checks by stage (the order to fix the problems). Nothing is selected when the window opens;
+        # the choice stays while the window is open.
+        # Title row of the frame: the text and the buttons for all checks (saves a row of height).
+        heading = ttk.Frame(frame)
+        everything = [name for _, names in STAGES for name in names]
+        ttk.Label(heading, text="Checks, in the order to fix the problems").grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(heading, text="Select all", command=lambda: self._set(everything, True)).grid(row=0, column=1)
+        ttk.Button(heading, text="Clear all",
+                   command=lambda: self._set(everything, False)).grid(row=0, column=2, padx=(4, 0))
+        checks = ttk.LabelFrame(frame, labelwidget=heading, padding=6)
+        checks.grid(row=4, column=0, columnspan=3, sticky="nsew", pady=8)
         frame.rowconfigure(4, weight=1)
         self.selected: dict[str, BooleanVar] = {}
-        for column, (title, names, on) in enumerate((("Text checks", TEXT_CHECKS, True),
-                                                     ("Checks of the whole project", list(PROJECT_CHECKS), False))):
-            box = ttk.LabelFrame(checks, text=title, padding=8)
-            box.grid(row=0, column=column, sticky="nsew", padx=(0, 8) if column == 0 else 0)
-            checks.columnconfigure(column, weight=1)
-            for row, name in enumerate(names):
-                var = self.selected[name] = BooleanVar(value=on)
+        for index, (title, names) in enumerate(STAGES):
+            row, column = divmod(index, STAGE_COLUMNS)
+            # "Stage 3. Characters and punctuation" on two lines: the boxes stand in one row.
+            number, _, name = title.partition(". ")
+            label = ttk.Label(checks, text=f"{number}\n{name}", wraplength=STAGE_WIDTH)
+            box = ttk.LabelFrame(checks, labelwidget=label, padding=(4, 2))
+            box.grid(row=row, column=column, sticky="nsew", padx=(0, 4))
+            checks.columnconfigure(column, weight=1, uniform="stage")
+            for line, name in enumerate(names):
+                var = self.selected[name] = BooleanVar(value=False)
+                var.trace_add("write", lambda *_: self._refresh_run())
                 button = ttk.Checkbutton(box, text=name, variable=var)
-                button.grid(row=row, column=0, sticky="w")
+                button.grid(row=line, column=0, sticky="w")
                 _Tooltip(button, CHECK_DESCRIPTIONS.get(name, ""))
+            box.rowconfigure(len(names), weight=1)
             buttons = ttk.Frame(box)
-            buttons.grid(row=len(names), column=0, sticky="w", pady=(6, 0))
-            ttk.Button(buttons, text="All", width=6,
+            buttons.grid(row=len(names) + 1, column=0, sticky="sw", pady=(4, 2))
+            ttk.Button(buttons, text="All", width=5,
                        command=lambda n=names: self._set(n, True)).grid(row=0, column=0)
-            ttk.Button(buttons, text="None", width=6,
-                       command=lambda n=names: self._set(n, False)).grid(row=0, column=1, padx=4)
+            ttk.Button(buttons, text="None", width=5,
+                       command=lambda n=names: self._set(n, False)).grid(row=0, column=1, padx=2)
 
-        self.run_button = ttk.Button(frame, text="Run checks", command=self._run)
-        self.run_button.grid(row=5, column=0, columnspan=2, sticky="w")
-        opening = ttk.Frame(frame)
-        opening.grid(row=5, column=2, sticky="e")
-        self.folder_button = ttk.Button(opening, text="Open txt folder", command=self._open_folder, state="disabled")
-        self.folder_button.grid(row=0, column=0, padx=(0, 6))
-        self.open_button = ttk.Button(opening, text="Open report", command=self._open, state="disabled")
-        self.open_button.grid(row=0, column=1)
+        self.running = False
+        # One row: Run, its hint or the progress bar, the buttons that open the reports.
+        running_row = ttk.Frame(frame)
+        running_row.grid(row=5, column=0, columnspan=3, sticky="ew")
+        running_row.columnconfigure(2, weight=1)
+        self.run_button = ttk.Button(running_row, text="Run checks", command=self._run, state="disabled")
+        self.run_button.grid(row=0, column=0)
+        self.run_hint = ttk.Label(running_row, text="Choose at least one check", foreground="gray")
+        self.run_hint.grid(row=0, column=1, padx=(8, 0))
+        self.progress = ttk.Progressbar(running_row, mode="determinate")
+        self.progress.grid(row=0, column=2, sticky="ew", padx=8)
+        self.folder_button = ttk.Button(running_row, text="Open txt folder", command=self._open_folder,
+                                        state="disabled")
+        self.folder_button.grid(row=0, column=3, padx=(0, 6))
+        self.open_button = ttk.Button(running_row, text="Open report", command=self._open, state="disabled")
+        self.open_button.grid(row=0, column=4)
         # The buttons open the reports in the Reports folder, also ones of an earlier run.
         self.report_dir.trace_add("write", lambda *_: self._refresh_buttons())
-        self.progress = ttk.Progressbar(frame, mode="determinate")
-        self.progress.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(10, 2))
         self.status = StringVar(value="Choose a project and press Run checks.")
-        ttk.Label(frame, textvariable=self.status, wraplength=720).grid(row=7, column=0, columnspan=3, sticky="w")
+        ttk.Label(frame, textvariable=self.status, wraplength=900).grid(row=6, column=0, columnspan=3, sticky="w",
+                                                                         pady=(6, 0))
         root.after(100, self._poll)
 
     def _set(self, names, value: bool) -> None:
         for name in names:
             self.selected[name].set(value)
+
+    def _refresh_run(self) -> None:
+        """Run works only when a check is selected and no run is going on."""
+        chosen = any(var.get() for var in self.selected.values())
+        self.run_button.configure(state="normal" if chosen and not self.running else "disabled")
+        self.run_hint.configure(text="" if chosen else "Choose at least one check")
 
     def _project_path(self) -> Path | None:
         text = self.project.get().strip()
@@ -183,7 +216,8 @@ class CheckerWindow:
         books = None if self.books.all_selected() else self.books.selected_codes()
         report_dir = Path(self.report_dir.get().strip() or default_report_dir(project, self.paratext))
         self.report_dir.set(str(report_dir))
-        self.run_button.configure(state="disabled")
+        self.running = True
+        self._refresh_run()
         self.open_button.configure(state="disabled")
         self.folder_button.configure(state="disabled")
         self.progress.configure(value=0, maximum=1)
@@ -197,8 +231,9 @@ class CheckerWindow:
             progress = lambda done, total, what: self.events.put(("progress", done, total, what))  # noqa: E731
             findings = list(run_checks(project, checks, books, None, skipped, progress, notes))
             self.events.put(("progress", 1, 1, "writing the reports"))
-            results = write_reports(project, findings, checks, report_dir, True, skipped, notes)
-            self.events.put(("done", results, report_dir / "index.html"))
+            run = new_run_folder(report_dir)
+            results = write_reports(project, findings, checks, run, True, skipped, notes)
+            self.events.put(("done", results, run / "index.html"))
         except Exception:  # shown to the user, the window stays open
             self.events.put(("error", traceback.format_exc()))
 
@@ -215,28 +250,28 @@ class CheckerWindow:
                     errors = sum(r.errors for r in results)
                     warnings = sum(r.warnings for r in results)
                     self.status.set(f"Done: {errors} errors, {warnings} warnings. Report: {index}")
-                    self.run_button.configure(state="normal")
+                    self.running = False
+                    self._refresh_run()
                     self._refresh_buttons()
                     self._open()
                 elif event[0] == "error":
                     self.status.set("The checks stopped with an error.")
-                    self.run_button.configure(state="normal")
+                    self.running = False
+                    self._refresh_run()
                     messagebox.showerror(TITLE, f"The checks stopped with an error:\n\n{event[1][-2000:]}")
         except queue.Empty:
             pass
         self.root.after(100, self._poll)
 
     def _report_paths(self) -> tuple[Path, Path] | None:
-        """(index.html, txt folder) of the Reports folder."""
+        """(index.html, txt folder) of the newest run in the Reports folder."""
         text = self.report_dir.get().strip()
-        if not text:
-            return None
-        folder = Path(text)
-        return folder / "index.html", folder / TXT_FOLDER
+        run = latest_run(Path(text)) if text else None
+        return (run / "index.html", run / TXT_FOLDER) if run else None
 
     def _refresh_buttons(self) -> None:
         paths = self._report_paths()
-        running = str(self.run_button.cget("state")) == "disabled"
+        running = self.running
         self.open_button.configure(state="normal" if paths and paths[0].is_file() and not running else "disabled")
         self.folder_button.configure(state="normal" if paths and paths[1].is_dir() and not running else "disabled")
 
@@ -264,7 +299,7 @@ class BookPicker(ttk.LabelFrame):
     (the start), adds the group otherwise, and clears the group when all its books are selected.
     """
 
-    ROWS = 14
+    ROWS = 12
     GROUPS = (("Old Testament", OLD_TESTAMENT), ("New Testament", NEW_TESTAMENT),
               ("Deuterocanon", DEUTEROCANON), ("Extra material", EXTRA_MATERIAL))
     ON, OFF = ("#0a64c8", "white"), ("white", "black")  # background, text
@@ -385,12 +420,19 @@ class _Tooltip:
 
 
 def main() -> None:
+    if getattr(sys, "frozen", False):
+        # Programs opened from the window (the browser by "Open report") inherit the environment of the exe. Without
+        # this, a report link that the browser opens later starts checker.exe as a part of this run, whose temporary
+        # folder is gone by then: "Failed to load Python DLL". PyInstaller 6.10+ reads this variable.
+        os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     root = Tk()
     if ICON.is_file():
         try:
             root.iconbitmap(default=str(ICON))  # also for the dialogs of the window
         except Exception:  # not Windows: .ico is not supported, keep the default icon
             pass
+    # Links in the reports (MAT 5:3) open the verse in Paratext through this program: register it (again, if it moved).
+    register_links()
     CheckerWindow(root)
     root.mainloop()
 

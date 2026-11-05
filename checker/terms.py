@@ -195,6 +195,11 @@ def _skipped(ctx: CheckContext, check: str) -> bool:
     return False
 
 
+def _quoted(renderings: list[str]) -> str:
+    """'a' || 'b': each rendering in quotes, so the HTML report can copy each one."""
+    return " || ".join(f"'{item}'" for item in renderings)
+
+
 def _context(text: str) -> str:
     return text if len(text) <= CONTEXT_CHARS * 2 else text[:CONTEXT_CHARS * 2] + "…"
 
@@ -241,8 +246,8 @@ def check_terms(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
         gloss = f" ({term.gloss})" if term.gloss else ""
         for book, chapter, verse in missing:
             yield Finding(book, f"{chapter}:{verse}", WARNING, "terms", term.id,
-                          f"the term {term.id}{gloss} is rendered in {checked - len(missing)} of its {checked} "
-                          f"verses, but not here. Renderings: {' || '.join(rendering.renderings)}",
+                          f"the term '{term.id}'{gloss} is rendered in {checked - len(missing)} of its {checked} "
+                          f"verses, but not here. Renderings: {_quoted(rendering.renderings)}",
                           _context(usage.verse_texts[(book, chapter, verse)]))
     ctx.notes["terms"] = (
         (data.note + " " if data.note else "") +
@@ -282,7 +287,7 @@ def _unused_renderings(data: TermData, usage: UsageCounter, lower: dict) -> Iter
                         break
             if not found:
                 yield Finding(PLACE, "(renderings)", WARNING, "terms", item,
-                              f"the rendering '{item}' of the term {term.id} is not found anywhere in the text",
+                              f"the rendering '{item}' of the term '{term.id}' is not found anywhere in the text",
                               "")
 
 
@@ -303,7 +308,7 @@ def check_term_lists(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding
     else:
         for term_id, rendering in guessed:
             yield Finding(PLACE, "(guessed)", WARNING, "term-lists", term_id,
-                          f"the rendering '{' || '.join(rendering.renderings)}' of the term {term_id} was guessed by "
+                          f"the rendering {_quoted(rendering.renderings)} of the term '{term_id}' was guessed by "
                           f"Paratext and is not checked by a person", "")
     for term_id, rendering in data.renderings.items():
         if term_id not in verses_of:
@@ -313,9 +318,9 @@ def check_term_lists(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding
             book, chapter, number = verse
             if verse not in verses_of[term_id]:
                 yield Finding(book, f"{chapter}:{number}", WARNING, "term-lists", term_id,
-                              f"the term {term_id} is marked OK without a rendering in a verse where it does not "
+                              f"the term '{term_id}' is marked OK without a rendering in a verse where it does not "
                               f"occur (maybe the verse numbers changed); remove the mark", "")
             elif verse in lower and any(p.search(lower[verse]) for p in patterns):
                 yield Finding(book, f"{chapter}:{number}", WARNING, "term-lists", term_id,
-                              f"the term {term_id} is marked OK without a rendering in this verse, but its "
+                              f"the term '{term_id}' is marked OK without a rendering in this verse, but its "
                               f"rendering is here now; remove the mark", _context(usage.verse_texts[verse]))

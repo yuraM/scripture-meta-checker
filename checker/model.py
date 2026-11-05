@@ -12,7 +12,7 @@ from checker.usfm import Segment
 
 ERROR = "error"
 WARNING = "warning"
-CONTEXT_WIDTH = 20
+CONTEXT_WIDTH = 50  # characters of text shown on each side of a finding
 
 
 @dataclass(frozen=True)
@@ -66,6 +66,12 @@ class CheckContext:
         self.language = language or profile_for(settings.language_iso_code)
         # Words of all \toc1-3 names of the project; filled before the checks run.
         self.book_name_words: frozenset[str] = frozenset()
+        # Only the capitalized words of the book names ("Roma", not "di"): spelling does not check them.
+        self.book_title_words: frozenset[str] = frozenset()
+        self.skipped_book_words: set[str] = set()  # book name words that spelling did not check
+        # The checks of this run: a check may leave a problem to another one that shows the same thing.
+        self.checks: frozenset[str] = frozenset()
+        self.mixed_case_words: set[str] = set()  # words that spelling left to mixed-capitalization
         # ParallelPassageStatus.xml entries (checker.parallels.PassageStatus); None = the project has no such file.
         self.parallel_passages: list | None = None
         # Check name -> why it could not run (shown in its report).

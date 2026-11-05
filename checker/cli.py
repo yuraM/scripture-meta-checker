@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from datetime import datetime
 from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
@@ -23,12 +24,13 @@ from checker.checks import (
 )
 from checker import places
 from checker.books import book_from_file_name, book_order
-from checker.html_report import TXT_FOLDER, CheckResult, Problem, write_html_report
+from checker.html_report import HTML_FOLDER, TXT_FOLDER, CheckResult, Problem, write_html_report
 from checker.hyphenation import load_hyphenation
 from checker.languages import PROFILES, profile_for
 from checker.parallels import PARALLEL_FILE, load_parallel_status
 from checker.settings import load_settings
 from checker.spelling import SpellingList, load_spelling_status
+from checker.stages import STAGES, in_stage_order, stage_checks
 from checker.structure import book_name_words
 from checker.terms import load_terms
 from checker.usfm import parse_usfm
@@ -58,6 +60,9 @@ CHECK_DESCRIPTIONS = {
     "repeated-words": "The same word two times in a row. Words marked correct or wrong in Paratext: "
                       f"{places.inventory(places.REPEATED_WORDS)}.",
     "spacing": f"Two spaces in a row, and the thousands separator in numbers (Paratext: {places.NUMBER_SETTINGS}).",
+    "numbers": "Numbers with 4 digits must be written the same way in the whole text: with the thousands separator "
+               f"(4 000) or without it (4000), as most of them are. The separator comes from {places.NUMBER_SETTINGS}. "
+               "Book introductions are not counted, because they have many years (1446).",
     "scripts": "One word with letters from different alphabets, for example a Latin c in a Cyrillic word. "
                "These letters look the same, so they are hard to see.",
     "normalization": "The text must use the Unicode form from Settings.xml (NormalizationForm). "
@@ -72,6 +77,11 @@ CHECK_DESCRIPTIONS = {
     "book-titles": "The names of a book must agree. The long name \\toc1 is the main title: all \\mt lines in their "
                    "order (\\mt2 + \\mt1). The short name \\toc2 is the running header \\h. "
                    f"Book names: {places.BOOK_NAMES}.",
+    "special-spaces": "Spaces that do not break a line. The narrow no-break space (U+202F) is used only between two "
+                      "quotation marks, inside \\fv … \\fv* (\\fv 13 \\fv*Text, no space after \\fv*), and where the "
+                      "project settings use it (numbers, reference marks). An abbreviation that the Abbreviations "
+                      "list writes with ~ (the normal no-break space) is written the same way in the text. Between "
+                      f"verse numbers after an abbreviation the marks come from {places.REFERENCE_FORMAT}.",
     "hyphenation": f"The list of word breaks {HYPHENATION_FILE} (Paratext Wordlist, column Hyphenation). "
                    "The sign = is a place where a line may break. The sign * means a person checked the entry.",
     "lists": "Paratext Wordlist, the checking inventories and the word breaks list must not disagree with each other. "
@@ -107,9 +117,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Validate a Paratext project against its own settings.")
     parser.add_argument("project", type=Path, help="project folder with Settings.xml, SpellingStatus.xml and *.SFM")
     parser.add_argument("--checks", nargs="+", choices=sorted([*TEXT_CHECKS, *PROJECT_CHECKS, ALL]),
-                        default=TEXT_CHECKS,
                         help=f"checks to run (default: text checks; project checks {', '.join(PROJECT_CHECKS)} "
-                             f"only when named or with '{ALL}')")
+                             f"only when named, with '{ALL}' or with --stage)")
+    parser.add_argument("--stage", nargs="+", type=int, choices=range(1, len(STAGES) + 1), metavar="N",
+                        help="all checks of these stages, also with --checks: "
+                             + "; ".join(title for title, _ in STAGES))
     parser.add_argument("--books", nargs="+", metavar="CODE", help="only these books, e.g. GEN MAT")
     parser.add_argument("--language", metavar="CODE",
                         help="language profile for language-specific rules (default: LanguageIsoCode from "
@@ -158,6 +170,7 @@ def run_checks(
     hyphenation = load_hyphenation(hyphenation_path) if hyphenation_path.exists() else None
     profile = profile_for(language) if language is not None else None
     ctx = CheckContext(settings, spelling, hyphenation, profile)
+    ctx.checks = frozenset(checks)
     if skipped is not None:
         ctx.skipped = skipped
     parallel_path = project / PARALLEL_FILE
@@ -173,6 +186,7 @@ def run_checks(
     pattern = f"{settings.file_name_pre_part}*{settings.file_name_post_part}"
     sources = [(path, path.read_text(encoding="utf-8-sig")) for path in sorted(project.glob(pattern))]
     ctx.book_name_words = frozenset(word for _, content in sources for word in book_name_words(content))
+    ctx.book_title_words = frozenset(word for _, content in sources for word in book_name_words(content, names_only=True))
     file_of_book: dict[str, str] = {}
     for number, (path, content) in enumerate(sources):
         if progress:
@@ -299,27 +313,64 @@ def check_results(findings: Sequence[Finding], checks: Sequence[str],
         selected = [f for f in findings if f.check == name]
         errors = sum(f.severity == ERROR for f in selected)
         problems = [Problem(group[0].severity, group[0].message, len(group), group[0].context.strip(),
-                            format_locations(group)) for group in group_problems(selected)]
+                            format_locations(group), group[0].item) for group in group_problems(selected)]
         results.append(CheckResult(name, CHECK_DESCRIPTIONS.get(name, ""), errors, len(selected) - errors,
                                    skipped.get(name, ""), problems, (notes or {}).get(name, "")))
     return results
 
 
+RUN_FOLDER_FORMAT = "%Y-%m-%d_%H-%M"  # one folder per run: <project>_report/2026-11-03_14-05/
+_RUN_FOLDER_RE = re.compile(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}(?:_\d+)?$")
+
+
+def new_run_folder(report_dir: Path) -> Path:
+    """A new folder for the reports of one run, named by date and time, inside `report_dir`.
+
+    Reports of older versions lay directly in `report_dir` (<check>.txt, <check>.html, index.html, html/, txt/):
+    they are removed, other files there are kept.
+    """
+    report_dir.mkdir(parents=True, exist_ok=True)
+    for name in CHECK_DESCRIPTIONS:
+        for old in (report_dir / f"{name}.txt", report_dir / f"{name}.html",
+                    report_dir / TXT_FOLDER / f"{name}.txt", report_dir / HTML_FOLDER / f"{name}.html"):
+            old.unlink(missing_ok=True)
+    (report_dir / "index.html").unlink(missing_ok=True)
+    for folder in (report_dir / TXT_FOLDER, report_dir / HTML_FOLDER):
+        if folder.is_dir() and not any(folder.iterdir()):
+            folder.rmdir()
+    stamp = datetime.now().strftime(RUN_FOLDER_FORMAT)
+    run = report_dir / stamp
+    number = 2
+    while run.exists():  # two runs in the same minute
+        run = report_dir / f"{stamp}_{number}"
+        number += 1
+    run.mkdir()
+    return run
+
+
+def latest_run(report_dir: Path) -> Path | None:
+    """The newest run folder with a report (by its name, which is the date and time), or None."""
+    if not report_dir.is_dir():
+        return None
+    runs = [p for p in report_dir.iterdir() if p.is_dir() and _RUN_FOLDER_RE.match(p.name) and (p / "index.html").is_file()]
+    return max(runs, key=lambda p: (p.name[:16], int(p.name[17:] or 1)), default=None)
+
+
 def write_reports(project: Path, findings: list[Finding], checks: Sequence[str], report_dir: Path, unique: bool,
                   skipped: dict[str, str], notes: dict[str, str] | None = None) -> list[CheckResult]:
-    """The reports in `report_dir`: index.html, html/<check>.html and txt/<check>.txt."""
+    """The reports in `report_dir` (the folder of one run): index.html, html/<check>.html and txt/<check>.txt."""
     txt_dir = report_dir / TXT_FOLDER
     txt_dir.mkdir(parents=True, exist_ok=True)
-    # Reports of older versions lay directly in the folder: remove them so that only one copy is left.
-    for name in CHECK_DESCRIPTIONS:
-        for old in (report_dir / f"{name}.txt", report_dir / f"{name}.html"):
-            old.unlink(missing_ok=True)
     for name in checks:
         selected = [f for f in findings if f.check == name]
         with (txt_dir / f"{name}.txt").open("w", encoding="utf-8") as out:
             write_report(selected, [name], unique, out, skipped, notes)
     results = check_results(findings, checks, skipped, notes)
-    write_html_report(report_dir, project.resolve().name, results, LOCATION_HELP)
+    # Links to Paratext name the project as Paratext windows do (Settings.xml <Name>), with its versification.
+    settings_path = project / "Settings.xml"
+    settings = load_settings(settings_path) if settings_path.is_file() else None
+    link = {"project": settings.name or project.resolve().name, "vrs": settings.versification} if settings else None
+    write_html_report(report_dir, project.resolve().name, results, LOCATION_HELP, link)
     return results
 
 
@@ -328,7 +379,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
-    checks = [*TEXT_CHECKS, *PROJECT_CHECKS] if ALL in args.checks else args.checks
+    if args.checks and ALL in args.checks:
+        checks = [*TEXT_CHECKS, *PROJECT_CHECKS]
+    elif args.checks or args.stage:
+        checks = [*(args.checks or []), *stage_checks(args.stage or [])]
+    else:
+        checks = TEXT_CHECKS
+    checks = in_stage_order(checks)
     skipped: dict[str, str] = {}
     notes: dict[str, str] = {}
     findings = list(run_checks(args.project, checks, args.books, args.language, skipped, notes=notes))
@@ -336,12 +393,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         findings = [f for f in findings if f.severity == ERROR]
 
     if args.report_dir:
-        results = write_reports(args.project, findings, checks, args.report_dir, args.unique, skipped, notes)
+        run = new_run_folder(args.report_dir)
+        results = write_reports(args.project, findings, checks, run, args.unique, skipped, notes)
         for result in results:
             counts = ("  not checked" if result.skipped
                       else f"{result.errors:6} errors {result.warnings:7} warnings")
-            print(f"{result.name:22} {counts}  -> {args.report_dir / TXT_FOLDER / (result.name + '.txt')}")
-        print(f"HTML report: {args.report_dir / 'index.html'}")
+            print(f"{result.name:22} {counts}  -> {run / TXT_FOLDER / (result.name + '.txt')}")
+        print(f"HTML report: {run / 'index.html'}")
     elif args.output:
         with args.output.open("w", encoding="utf-8") as out:
             write_report(findings, checks, args.unique, out, skipped, notes)
