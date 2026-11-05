@@ -6,6 +6,8 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### Fixed
 
+- **Report links:** `0:0` (the introduction of a book) is now a link too; it opens the start of the book
+  in Paratext (`1:0`, where Paratext keeps the introduction).
 - **book-titles:** the text of the check now says that the long book name `\toc1` is all title lines `\mt1`,
   `\mt2`, `\mt3` … joined in the order of the file (for example `\mt2 + \mt1 + \mt3`); before it gave only
   `\mt2 + \mt1` as the example. The check itself already joined every `\mt` line.

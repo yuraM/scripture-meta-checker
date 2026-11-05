@@ -95,7 +95,8 @@ const list = document.getElementById('list'), more = document.getElementById('mo
 let shown = 0, matches = [];
 function esc(s){return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // "MAT 27:46, 28:1 (2×); MRK 15:34": each chapter:verse becomes a link that makes Paratext show the verse
-// (checker/paratext_link.py); places without a book and chapter (lists, chapter 0) stay text.
+// (checker/paratext_link.py); places without a book stay text. 0:0 (the introduction) opens 1:0: Paratext has the
+// introduction there and does not accept chapter 0.
 function refLink(ref){
   return `${LINK.protocol}:${encodeURIComponent(LINK.project)}/${encodeURIComponent(ref).replace(/%3A/g, ':')}`
        + (LINK.vrs ? `?vrs=${encodeURIComponent(LINK.vrs)}` : '');
@@ -107,8 +108,9 @@ function where(text){
     if (!m) return esc(group);
     return esc(m[1]) + ' ' + m[2].split(', ').map(part => {
       const v = /^(\d+):(\d+)/.exec(part);
-      if (!v || v[1] === '0') return esc(part);
-      return `<a class="ref" href="${esc(refLink(`${m[1]} ${+v[1]}:${+v[2]}`))}" title="Show in Paratext">${esc(part)}</a>`;
+      if (!v) return esc(part);
+      const target = +v[1] ? `${+v[1]}:${+v[2]}` : '1:0';
+      return `<a class="ref" href="${esc(refLink(`${m[1]} ${target}`))}" title="Show in Paratext">${esc(part)}</a>`;
     }).join(', ');
   }).join('; ');
 }

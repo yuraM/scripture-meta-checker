@@ -428,7 +428,8 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
   abbreviations (Ukrainian `як` = James, Tigrinya `ኣብ` = Obadiah).
 - **Links to Paratext** (done 2026-11-05, `checker/paratext_link.py`): each `chapter:verse` in `Where:` of the HTML
   pages is a link `scripturechecker:<Settings.xml Name>/MAT%205:3?vrs=<Versification>` (built in the page script;
-  chapter 0 and places without a book stay text). Windows runs `checker.exe "<link>"` (or `pythonw checker_app.py`):
+  places without a book stay text; `0:0`, the introduction, opens `1:0`: Paratext keeps the introduction there and
+  ignores chapter 0). Windows runs `checker.exe "<link>"` (or `pythonw checker_app.py`):
   no window; it writes the reference to `HKCU\Software\SantaFe\Focus\ScriptureReference` (default value), posts
   `RegisterWindowMessage("SantaFeFocus")` with wParam 1 to HWND_BROADCAST (Paratext moves the windows of scroll group
   A), brings Paratext to the front and reads the child window titles (`<project>: MAT 5:3 (Standard Translation)`) to
