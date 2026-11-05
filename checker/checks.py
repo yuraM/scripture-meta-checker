@@ -9,7 +9,7 @@ from functools import lru_cache
 
 from checker import places
 from checker.approvals import check_approvals
-from checker.divine_name import check_divine_name
+from checker.divine_name import VerseNd, check_divine_name
 from checker.footnotes import Note, check_footnotes, read_notes
 from checker.hyphenation import inconsistent_affixes, is_unhyphenated, rule_violations, word_scripts
 from checker.model import ERROR, WARNING, Analysis, CheckContext, Finding  # noqa: F401 (re-exported)
@@ -481,6 +481,8 @@ class UsageCounter:
         # each as (book, chapter:verse, number, context).
         self.four_digit: tuple[list[tuple[str, str, str, str]], list[tuple[str, str, str, str]]] = ([], [])
         self.footnotes: list[Note] = []  # footnotes of the checked books, read from the raw files
+        # (book, "chapter:verse") -> \nd count and words without \nd in the scripture text of the verse.
+        self.nd_places: dict[tuple[str, str], VerseNd] = {}
 
     def _add_numbers(self, analysis: Analysis, ctx: CheckContext) -> None:
         separator = ctx.settings.number_thousands_separator
@@ -513,6 +515,19 @@ class UsageCounter:
             for number in range(numbers[0], numbers[1] + 1):
                 key = (segment.book, int(chapter), number)
                 self.verse_texts[key] = f"{self.verse_texts[key]} {piece}" if key in self.verse_texts else piece
+        self._add_divine_name(analysis)
+
+    def _add_divine_name(self, analysis: Analysis) -> None:
+        """\\nd count and the words without \\nd of each verse of scripture text (divine-name)."""
+        segment = analysis.segment
+        for start, _, marker in segment.spans:
+            if marker == "nd":
+                self.nd_places.setdefault((segment.book, segment.ref_at(start)), VerseNd()).count += 1
+        for word in analysis.words:
+            # A name is not written small ("tu señor" is a man); scripts without capitals keep every word.
+            if not word.text[0].islower() and "nd" not in segment.styles_at(word.start):
+                place = self.nd_places.setdefault((segment.book, segment.ref_at(word.start)), VerseNd())
+                place.plain.append(word.text)
 
     def add_source(self, book: str, content: str, ctx: CheckContext, with_references: bool = True) -> None:
         """Index a book file: its verses and names for every book, its references if it is checked."""
@@ -786,7 +801,7 @@ def check_divine_name_verses(usage: UsageCounter, ctx: CheckContext) -> Iterator
         ctx.skipped["divine-name"] = (f"Not checked: the versification of the project "
                                       f"({ctx.settings.versification}) is not a standard one.")
         return
-    yield from check_divine_name(usage.style_refs, usage.verse_texts, ctx.to_original)
+    yield from check_divine_name(usage.style_refs, usage.nd_places, usage.verse_texts, ctx.to_original)
 
 
 def _book_name_key(name: str) -> str:

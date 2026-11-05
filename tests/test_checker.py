@@ -1007,19 +1007,24 @@ class DivineNameTest(unittest.TestCase):
     def test_map_is_bundled(self):
         from checker.divine_name import nd_verses
         verses = nd_verses()
-        self.assertIn(("GEN", 2, 4), verses)  # "the LORD God made the earth"
+        self.assertEqual(verses[("GEN", 2, 4)], 1)  # "the LORD God made the earth"
+        self.assertEqual(verses[("GEN", 3, 8)], 2)  # "the LORD God … the LORD God"
         self.assertNotIn(("GEN", 1, 1), verses)  # "God created"
         self.assertGreater(len(verses), 5000)
 
-    def test_word_usually_in_nd(self):
-        from checker.divine_name import check_divine_name
+    def test_fewer_nd_than_the_map(self):
+        from checker.divine_name import VerseNd, check_divine_name
         inside = [("GEN", f"{chapter}:1") for chapter in range(30, 55)]
-        style_refs = {("nd", "господь"): (inside, [("GEN", "2:4"), ("GEN", "1:1"), ("GEN", "3:1")])}
-        texts = {("GEN", 2, 4): "Господь Бог створив", ("GEN", 1, 1): "Господь створив",
-                 ("GEN", 3, 1): "і господь його"}
-        found = list(check_divine_name(style_refs, texts, lambda verse: verse))
-        # 1:1 is not a verse of the map; in 3:1 the word is written small (a man, not a name).
-        self.assertEqual([f.ref for f in found], ["2:4"])
+        style_refs = {("nd", "господь"): (inside, [("GEN", "2:4")])}
+        places = {
+            ("GEN", "2:4"): VerseNd(0, ["Господь"]),  # map 1, here 0
+            ("GEN", "1:1"): VerseNd(0, ["Господь"]),  # not in the map
+            ("GEN", "3:8"): VerseNd(1, ["Господь"]),  # map 2, here 1
+            ("GEN", "3:9"): VerseNd(1, ["Господь"]),  # map 1, here 1
+            ("GEN", "3:13"): VerseNd(0, ["Він"]),     # "he" where the base translation says "the LORD"
+        }
+        found = list(check_divine_name(style_refs, places, {}, lambda verse: verse))
+        self.assertEqual([f.ref for f in found], ["2:4", "3:8"])
 
     def test_project_versification_with_custom_vrs(self):
         from checker.versification import project_to_original
