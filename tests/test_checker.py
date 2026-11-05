@@ -566,6 +566,15 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         findings = list(check_lists(UsageCounter(), self.ctx))
         self.assertIn("'Дивіться' is W but 'дивіться' is R", {f.message for f in findings})
 
+    def test_lists_hyphenated_wrong_word(self):
+        # "-" is in every hyphenation list: not a word, even when the Wordlist marks it wrong.
+        self.ctx.spelling.entries["-"] = SpellingEntry("-", "W")
+        path = self.root / "hyphenatedWords.txt"
+        path.write_text('HardHyphen = "-"\nSoftHyphen = "="\n*-\n*по=мил=ка\n*сло=во\n', encoding="utf-8")
+        self.ctx.hyphenation = load_hyphenation(path)
+        findings = [f for f in check_lists(UsageCounter(), self.ctx) if "is hyphenated" in f.message]
+        self.assertEqual([f.item for f in findings], ["по=мил=ка"])
+
     def _parallel_usage(self) -> UsageCounter:
         usage = UsageCounter()
         for content in ("\\id GEN\n\\c 1\n\\p \\v 1 alpha beta gamma delta \\v 2 one two three four five.\n"

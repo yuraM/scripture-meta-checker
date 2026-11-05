@@ -880,6 +880,9 @@ def check_lists(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
                           f"{places.WORDLIST}", "")
     if ctx.hyphenation:
         for entry in ctx.hyphenation.words:
+            # An entry without letters ("-", which Publishing Assistant puts into every list) is not a word.
+            if not any(ch.isalpha() for ch in entry.word):
+                continue
             spelling = ctx.spelling.lookup(entry.word)
             if spelling and spelling.state == STATE_WRONG:
                 yield _list_finding(f"line {entry.line}", WARNING, "lists", entry.text,

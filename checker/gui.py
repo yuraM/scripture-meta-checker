@@ -104,14 +104,7 @@ class CheckerWindow:
 
         # The checks by stage (the order to fix the problems). Nothing is selected when the window opens;
         # the choice stays while the window is open.
-        # Title row of the frame: the text and the buttons for all checks (saves a row of height).
-        heading = ttk.Frame(frame)
-        everything = [name for _, names in STAGES for name in names]
-        ttk.Label(heading, text="Checks, in the order to fix the problems").grid(row=0, column=0, padx=(0, 8))
-        ttk.Button(heading, text="Select all", command=lambda: self._set(everything, True)).grid(row=0, column=1)
-        ttk.Button(heading, text="Clear all",
-                   command=lambda: self._set(everything, False)).grid(row=0, column=2, padx=(4, 0))
-        checks = ttk.LabelFrame(frame, labelwidget=heading, padding=6)
+        checks = ttk.LabelFrame(frame, text="Checks, in the order to fix the problems", padding=6)
         checks.grid(row=4, column=0, columnspan=3, sticky="nsew", pady=8)
         frame.rowconfigure(4, weight=1)
         self.selected: dict[str, BooleanVar] = {}
@@ -136,6 +129,14 @@ class CheckerWindow:
                        command=lambda n=names: self._set(n, True)).grid(row=0, column=0)
             ttk.Button(buttons, text="None", width=5,
                        command=lambda n=names: self._set(n, False)).grid(row=0, column=1, padx=2)
+        # Under the stages, above Run: the buttons for all checks.
+        all_buttons = ttk.Frame(checks)
+        all_buttons.grid(row=len(STAGES) // STAGE_COLUMNS + 1, column=0, columnspan=STAGE_COLUMNS, sticky="w",
+                         pady=(6, 0))
+        everything = [name for _, names in STAGES for name in names]
+        ttk.Button(all_buttons, text="Select all", command=lambda: self._set(everything, True)).grid(row=0, column=0)
+        ttk.Button(all_buttons, text="Clear all",
+                   command=lambda: self._set(everything, False)).grid(row=0, column=1, padx=(4, 0))
 
         self.running = False
         # One row: Run, its hint or the progress bar, the buttons that open the reports.
