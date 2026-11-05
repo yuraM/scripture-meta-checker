@@ -1007,8 +1007,10 @@ class DivineNameTest(unittest.TestCase):
     def test_map_is_bundled(self):
         from checker.divine_name import nd_verses
         verses = nd_verses()
-        self.assertEqual(verses[("GEN", 2, 4)], 1)  # "the LORD God made the earth"
-        self.assertEqual(verses[("GEN", 3, 8)], 2)  # "the LORD God … the LORD God"
+        self.assertEqual(verses[("GEN", 2, 4)].nd, 1)  # "the LORD God made the earth"
+        self.assertEqual(verses[("GEN", 3, 8)].nd, 2)  # "the LORD God … the LORD God"
+        self.assertEqual(verses[("EXO", 4, 10)].lord, 1)  # "said to the LORD, Pardon your servant, Lord"
+        self.assertEqual(verses[("PSA", 18, 1)].nd, 3)  # the psalm title is verse 1 in Original numbers
         self.assertNotIn(("GEN", 1, 1), verses)  # "God created"
         self.assertGreater(len(verses), 5000)
 
@@ -1022,8 +1024,10 @@ class DivineNameTest(unittest.TestCase):
             ("GEN", "3:8"): VerseNd(1, ["Господь"]),  # map 2, here 1
             ("GEN", "3:9"): VerseNd(1, ["Господь"]),  # map 1, here 1
             ("GEN", "3:13"): VerseNd(0, ["Він"]),     # "he" where the base translation says "the LORD"
+            ("EXO", "4:10"): VerseNd(0, ["Господи"]),  # map 1 \nd + 1 "Lord": one word for both is fine
         }
-        found = list(check_divine_name(style_refs, places, {}, lambda verse: verse))
+        found = list(check_divine_name(style_refs | {("nd", "господи"): (inside, [])}, places, {},
+                                       lambda verse: verse))
         self.assertEqual([f.ref for f in found], ["2:4", "3:8"])
 
     def test_project_versification_with_custom_vrs(self):

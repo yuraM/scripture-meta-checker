@@ -7,7 +7,9 @@ its custom.vrs (versification.project_to_original) and looked up there.
 
 Words of the project itself say which word is the divine name: a word in \\nd in at least MIN_INSIDE places and
 MIN_SHARE of its places. Such a word without \\nd (not written small) in a verse that has fewer \\nd than the map says
-is reported: "\\nd Herren\\nd* … Så säger Herren" where the map has 2. A verse with fewer \\nd but without such a word
+is reported: "\\nd Herren\\nd* … Så säger Herren" where the map has 2. Where the base translation also has "Lord" without
+\\nd (Adonai: "the Lord, the LORD Almighty"), that many \\nd may be missing. Psalm titles (\\d) are verses of the map
+too. A verse with fewer \\nd but without such a word
 is not reported: translations often say "he" where the base translation says "the LORD". More \\nd than the map is
 not reported either: translations often repeat the name where the base translation has "he".
 """
@@ -28,7 +30,7 @@ MIN_INSIDE = 20   # the word is in \nd at least this often
 MIN_SHARE = 0.8   # and in at least this part of its places
 
 Location = tuple[str, str]  # (book, "chapter:verse")
-_LINE_RE = re.compile(r"([0-9A-Z]{3}) (\d+):([\d,*-]+)$")
+_LINE_RE = re.compile(r"([0-9A-Z]{3}) (\d+):([\d,*/-]+)$")
 
 
 @dataclass
@@ -38,20 +40,27 @@ class VerseNd:
     plain: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class MapVerse:
+    nd: int          # \nd in the base translation
+    lord: int = 0    # "Lord" without \nd in the same verse (Adonai): a translation may use the same word for both
+
+
 @lru_cache(maxsize=1)
-def nd_verses(path: Path = ND_VERSES) -> dict[Verse, int]:
-    """"GEN 2:4-5,7*2" -> {("GEN", 2, 4): 1, ("GEN", 2, 5): 1, ("GEN", 2, 7): 2}."""
-    verses: dict[Verse, int] = {}
+def nd_verses(path: Path = ND_VERSES) -> dict[Verse, MapVerse]:
+    """"GEN 2:4-5,7*2,9/1" -> GEN 2:4 and 2:5 one \\nd, 2:7 two, 2:9 one \\nd and one plain "Lord"."""
+    verses: dict[Verse, MapVerse] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         match = _LINE_RE.match(line.strip())
         if not match:
             continue
         book, chapter = match.group(1), int(match.group(2))
         for part in match.group(3).split(","):
+            part, _, lord = part.partition("/")
             numbers, _, count = part.partition("*")
             first, _, last = numbers.partition("-")
             for verse in range(int(first), int(last or first) + 1):
-                verses[(book, chapter, verse)] = int(count or 1)
+                verses[(book, chapter, verse)] = MapVerse(int(count or 1), int(lord or 0))
     return verses
 
 
@@ -99,8 +108,10 @@ def check_divine_name(
         if word is None:
             continue
         verses = _verses(location)
-        expected = sum(listed.get(to_original(verse), 0) for verse in verses)
-        if place.count >= expected:
+        found = [listed[original] for original in map(to_original, verses) if original in listed]
+        expected = sum(verse.nd for verse in found)
+        # "the Lord, the LORD Almighty": a translation may write both with one word, one of them without \nd.
+        if expected - place.count <= sum(verse.lord for verse in found):
             continue
         text = " ".join(verse_texts[verse] for verse in verses if verse in verse_texts)
         here = "there is no \\nd here" if not place.count else f"here only {place.count}"

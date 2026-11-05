@@ -409,9 +409,13 @@ Notes on `terms` / `term-lists` (`checker/terms.py`, added 2026-11-03):
 
 Notes on `divine-name` (`checker/divine_name.py`, added 2026-11-05, user request: keep the map in the program so no
 base project is needed):
-- `nd_verses.txt` = 5 859 verses (784 chapter lines `GEN 3:1,8*2,9`; `*2` = two `\nd` in the verse; 6 838 `\nd` in
-  all) where an English base translation has `\nd` (scripture text only: no notes, no headings, no `\d`; a verse range
-  counts in its first verse), made once from that project; it holds verse numbers only, no text.
+- `nd_verses.txt` = 5 861 verses (784 chapter lines `GEN 3:1,8*2,9`; `*2` = two `\nd` in the verse; 6 842 `\nd` in
+  all) where an English base translation has `\nd` (scripture text and psalm titles `\d`, which are verse 0 there and
+  verse 1 in Original; no notes, no headings; a verse range counts in its first verse), made once from that project;
+  it holds verse numbers and counts only, no text. `/1` = the verse also has one "Lord" without `\nd` (Adonai, 49
+  verses: `EXO 4:10/1` "said to the LORD, Pardon your servant, Lord"): that many `\nd` may be missing, because a
+  translation may write both with one word (`Ya Tuhan`, `Señor Todopoderoso`). Measured: all 12 findings in such verses
+  were noise; none of the real ones were lost.
   Numbers are **Original** (the base translation's versification + its custom.vrs: `NEH 7:68`, `ISA 64:1` are numbered
   differently there). Bundled into the exe by build_exe.bat.
 - A project verse goes to Original with `versification.project_to_original` (its versification + its custom.vrs, whose
@@ -428,10 +432,10 @@ base project is needed):
   scripture text (no notes, no headings) the `\nd` count and the words without `\nd` that are not written small.
   **More** `\nd` than the map is not reported: translations repeat the name where the base translation has "he"
   (`Abram believed the LORD, and he credited` vs `\nd Господь\nd* зарахував`): 33-323 verses per project, noise.
-- Measured on 10 projects with `\nd`: 280 findings (216 with no `\nd` in the verse + 64 with fewer), mostly real
-  (`Herren sa`, `እግዚኣብሄር` without `\nd`). Known noise:
-  "Sovereign LORD" verses, where the word is the translation of Adonai (`Tuhan Allah`, `Soberano Senhor`), and verses
-  with both LORD and Lord. Projects without `\nd` give 0.
+- Measured on 10 projects with `\nd`: 270 findings, mostly real (`Herren sa`, `እግዚኣብሄር` without `\nd`; 216 before
+  counts, +64 with counts, -10 with the Adonai rule, +titles). Known noise left:
+  a paraphrase that says the verse differently (`Tuhan Allah` for "the Sovereign LORD" twice), a word for Adonai that
+  the base translation renders otherwise. Projects without `\nd` give 0.
 
 Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, added 2026-11-02):
 - Source: the project's **own** `ParallelPassageStatus.xml` (Paratext parallel passages tool), never a shared list or
