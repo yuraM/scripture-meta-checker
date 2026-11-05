@@ -6,6 +6,9 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### Fixed
 
+- **punctuation:** a mark of Scripture references (for example the range mark `–` in Project settings >
+  Scripture reference settings > Reference Format) is not reported inside a reference (`5:1–3`, `12:31b–13:2`,
+  `Psalms 1–41`), also when the punctuation lists reject it. In other places (`word–word`) it is still checked.
 - **Report links:** `0:0` (the introduction of a book) is now a link too; it opens the start of the book
   in Paratext (`1:0`, where Paratext keeps the introduction).
 - **book-titles:** the text of the check now says that the long book name `\toc1` is all title lines `\mt1`,

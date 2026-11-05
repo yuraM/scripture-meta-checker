@@ -5,6 +5,7 @@ import re
 import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
+from functools import lru_cache
 
 from checker import places
 from checker.approvals import check_approvals
@@ -75,13 +76,55 @@ def check_characters(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]
 
 
 def is_number_separator(runs: list[Run], index: int, ctx: CheckContext) -> bool:
-    """The run is a separator between two digits ("6,8", "12:5"), not punctuation between words."""
-    return (
-        runs[index].text in ctx.settings.number_medial_punctuation
-        and 0 < index < len(runs) - 1
-        and runs[index - 1].text[-1].isdigit()
-        and runs[index + 1].text[0].isdigit()
-    )
+    """The run is a separator between two digits ("6,8", "12:5"), not punctuation between words, or a mark of a
+    Scripture reference ("5:1‒3" with "‒" in Reference Format)."""
+    if not (0 < index < len(runs) - 1 and runs[index + 1].text[0].isdigit()):
+        return False
+    if runs[index - 1].text[-1].isdigit() and runs[index].text in ctx.settings.number_medial_punctuation:
+        return True
+    return _in_reference(runs, index, ctx)  # also after a verse part: "12:31б‒13:13"
+
+
+# Runs looked at before a mark to see whether it stands in a reference.
+REFERENCE_LOOK_BACK = 40
+
+
+@lru_cache(maxsize=8)
+def _reference_patterns(
+    reference_format: ReferenceFormat,
+) -> tuple[frozenset[str], re.Pattern[str], re.Pattern[str]]:
+    """Marks of references (Reference Format, without words such as "and") and the text a mark may follow in a
+    reference: "12:5", "12:5‒7, 9", "2:1‒7:10"; or a book name (group 1) and chapters: "Пар. 22", "Пар. 22‒26; 28"."""
+    marks = {mark.strip() for marks in (reference_format.verse_ranges, reference_format.verse_sequences,
+                                        reference_format.chapter_ranges, reference_format.chapter_sequences)
+             for mark in marks}
+    marks = frozenset(mark for mark in marks if mark and not any(ch.isalnum() for ch in mark))
+    separator = re.escape(reference_format.chapter_verse)
+    number = r"\d+[^\W\d_]?"  # 12 or 12б (a verse part)
+    any_mark = "|".join(re.escape(mark) for mark in sorted(marks | {reference_format.chapter_verse}, key=len,
+                                                            reverse=True))
+    more = rf"(?:\s?(?:{any_mark})\s?{number})*"
+    return (marks, re.compile(rf"\d+\s?{separator}\s?{number}{more}$"),
+            re.compile(rf"({LETTER}+)\.?[\s~]{number}{more}$"))
+
+
+def _in_reference(runs: list[Run], index: int, ctx: CheckContext) -> bool:
+    """The run is a mark of Reference Format standing in a reference: after "chapter:verse" ("5:1‒3", "5:1, 3‒4",
+    "2:1‒7:10") or after a book name and a number ("Psalms 1–41", "Быт. 6‒8")."""
+    marks, after, after_book = _reference_patterns(ctx.settings.reference_format)
+    if runs[index].text.strip() not in marks:
+        return False
+    before = "".join(run.text for run in runs[max(index - REFERENCE_LOOK_BACK, 0):index])
+    if after.search(before):
+        return True
+    book = after_book.search(before)
+    return bool(book) and book.group(1).lower() in _single_words(ctx.book_title_words)
+
+
+@lru_cache(maxsize=8)
+def _single_words(words: frozenset[str]) -> frozenset[str]:
+    """Book name words split at spaces: "1~Пар." is kept as "1 пар", the text has "Пар." after "1~"."""
+    return frozenset(part for word in words for part in word.split())
 
 
 def check_punctuation(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:

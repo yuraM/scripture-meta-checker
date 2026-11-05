@@ -289,6 +289,11 @@ multi-grapheme ValidCharacters items (`дж`) are ignored.
 Design decisions:
 - Separators between two digits (`6,8`, `1⁄16`, `12:5`) are skipped by `punctuation`
   (from NumberDecimalPoint / NumberMedialPunctuation / NumberThousandsSeparator / ChapterVerseSeparator).
+- A mark of Reference Format (RangeIndicator, ChapterRangeSeparator, ...) is not punctuation **in a reference** only
+  (added 2026-11-05, user request: a project rejects `–` as punctuation but uses it for verse ranges): after
+  `chapter:verse` (`5:1‒3`, `5:1, 7‒9`, `12:31б‒13:2`) or after a book name of `	oc1-3` and a number (`Пар. 22‒26; 28‒29`,
+  `Psalms 1–41`). Elsewhere (`слово‒слово`, `10‒12 лет`) the punctuation lists decide. Measured on 40 projects: e.g.
+  541 -> 86 and 1174 -> 17 warnings; what stays is mostly `гл. 1‒9`, `vv. 28‑29` (no chapter, no book name).
 - USFM attributes (`\xt 8-му|GEN 2:8\xt*`) are removed before checking (`usfm.remove_attributes`), also named
   attributes after any marker (`\periph Title|id="title"`, `\w Bible|lemma="b"`, `\zrule |cat="x"`; values may hold
   `\`) and milestones (`\qt-s |sid="q1"\*`, `\ts\*`). For `references` a `link-href="GEN 2:9"` is kept as `|GEN 2:9`.

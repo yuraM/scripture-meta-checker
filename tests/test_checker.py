@@ -515,6 +515,18 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         (self.root / "Settings.xml").write_text(xml, encoding="utf-8")
         self.assertLessEqual({",", "፣"}, load_settings(self.root / "Settings.xml").number_medial_punctuation)
 
+    def test_reference_range_mark_only_in_references(self):
+        # "‒" is a rejected mark but the range mark of Reference Format: allowed in references only.
+        fmt = ReferenceFormat(chapter_verse=":", verse_ranges=("‒",), chapter_ranges=("‒",),
+                              verse_sequences=(", ",), chapter_sequences=("; ",))
+        settings = replace(self.settings, reference_format=fmt, invalid_punctuation=frozenset({"‒"}),
+                           number_medial_punctuation=frozenset({":", ","}))
+        ctx = CheckContext(settings, self.spelling)
+        ctx.book_title_words = frozenset({"1 пар"})
+        segment = parse_usfm("\\p (5:1‒3, 7‒9; 12:31б‒13:2; 1~Пар. 22‒26; 28‒29) слово‒слово 10‒12", "TST")[0]
+        findings = [f for f in CHECKS["punctuation"](ctx.analyse(segment), ctx) if f.item == "‒"]
+        self.assertEqual(len(findings), 2)  # "слово‒слово" and "10‒12": not references
+
     def test_ordinals_skip_book_names(self):
         settings = replace(self.settings, number_ordinals=frozenset({"ን"}), number_ordinal_type="suffix")
         ctx = CheckContext(settings, self.spelling)
