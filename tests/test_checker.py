@@ -988,6 +988,22 @@ class ParatextLinkTest(unittest.TestCase):
         self.assertIn('const LINK = {"protocol": "scripturechecker", "project": "Abc", "vrs": "4"}', text)
 
 
+class UpdateTest(unittest.TestCase):
+    def test_versions(self):
+        from checker.updates import is_newer
+        self.assertTrue(is_newer("v1.10", "1.9"))
+        self.assertTrue(is_newer("v2.0", "1.12"))
+        self.assertFalse(is_newer("v1.1", "1.1"))
+        self.assertFalse(is_newer("v1.0", "1.1"))
+        self.assertFalse(is_newer("", "1.1"))  # no answer from GitHub
+
+    def test_no_internet_is_no_update(self):
+        from unittest import mock
+        from checker import updates
+        with mock.patch("urllib.request.urlopen", side_effect=OSError("offline")):
+            self.assertIsNone(updates.newer_release("1.0"))
+
+
 class WindowTest(unittest.TestCase):
     def test_report_folder_is_not_inside_the_paratext_folder(self):
         from checker.gui import default_report_dir, find_projects

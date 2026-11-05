@@ -109,6 +109,7 @@ errors and later stages were checked, a line "Fix them first". Measured on 9 pro
 `lists` -> `spelling` (W/R contradictions), `spelling` -> `hyphenation` (3.6k missing words are also unapproved),
 `spelling` -> `variants`/`parallel-changes`. Reports of a project inside the Paratext folder go to `Documents/Scripture checker reports/
 <project>_report` (never write into the Paratext folder); other projects keep `<project folder>_report`.
+**Version and update notice** (user decision, 2026-11-05): `checker/version.py` `VERSION` is shown in the window title; at start the window asks the GitHub API in the background for the latest release (`checker/updates.py`, public data only, 5 s timeout, any error = no notice) and, if its tag is newer, shows "A new version is ready" with a Download button (opens the release page). No automatic download. Release steps: raise `VERSION`, commit, rebuild the exe, `gh release create v<VERSION> dist/checker.exe --target main` with English notes.
 `build_exe.bat` builds `dist/checker.exe` with PyInstaller (build-only dependency, approved 2026-11-02; `build/` and
 `dist/` are build output).
 
@@ -147,6 +148,8 @@ wordlist/
 │   ├── spaces.py        # special-spaces check: U+202F, \fv … \fv*, abbreviations with ~ (raw file)
 │   ├── html_report.py   # HTML report: index.html + one page per check (static, inline CSS/JS)
 │   ├── gui.py           # tkinter window: choose project and checks, run, open the report
+│   ├── version.py       # VERSION (window title, compared with the newest GitHub release)
+│   ├── updates.py       # is there a newer release on GitHub? (notice in the window)
 │   ├── paratext_link.py # report links (scripturechecker:...) -> Paratext shows the verse; URL protocol registration
 │   ├── icon.ico         # window and exe icon (16-256 px, transparent corners), made from `Open Book Icon.png` in the root
 │   └── cli.py           # argparse, report writer, summary

@@ -21,6 +21,8 @@ from checker.cli import (
 from checker.html_report import TXT_FOLDER
 from checker.paratext_link import register as register_links
 from checker.stages import STAGES
+from checker.updates import newer_release
+from checker.version import VERSION
 
 TITLE = "Scripture checker"
 # Usual places of the Paratext projects folder; the registry is asked first.
@@ -75,8 +77,7 @@ class CheckerWindow:
         self.projects = find_projects(self.paratext)
         self.events: queue.Queue = queue.Queue()
 
-
-        root.title(TITLE)
+        root.title(f"{TITLE} {VERSION}")
         root.minsize(900, 640)
         frame = ttk.Frame(root, padding=14)
         frame.grid(sticky="nsew")
@@ -159,7 +160,22 @@ class CheckerWindow:
         self.status = StringVar(value="Choose a project and press Run checks.")
         ttk.Label(frame, textvariable=self.status, wraplength=900).grid(row=6, column=0, columnspan=3, sticky="w",
                                                                          pady=(6, 0))
+        # Shown only when GitHub has a newer release (check_for_update).
+        self.update_row = ttk.Frame(frame)
+        self.update_text = StringVar()
+        ttk.Label(self.update_row, textvariable=self.update_text, foreground="#0a64c8").grid(row=0, column=0)
+        self.update_page = ""
+        ttk.Button(self.update_row, text="Download",
+                   command=lambda: webbrowser.open(self.update_page)).grid(row=0, column=1, padx=(8, 0))
         root.after(100, self._poll)
+
+    def check_for_update(self) -> None:
+        """Ask GitHub in the background whether a newer release exists; the answer comes through the queue."""
+        def ask() -> None:
+            found = newer_release(VERSION)
+            if found:
+                self.events.put(("update", *found))
+        threading.Thread(target=ask, daemon=True).start()
 
     def _set(self, names, value: bool) -> None:
         for name in names:
@@ -255,6 +271,11 @@ class CheckerWindow:
                     self._refresh_run()
                     self._refresh_buttons()
                     self._open()
+                elif event[0] == "update":
+                    _, tag, page = event
+                    self.update_page = page
+                    self.update_text.set(f"A new version is ready: {tag.lstrip('vV')} (this is {VERSION}).")
+                    self.update_row.grid(row=7, column=0, columnspan=3, sticky="w", pady=(6, 0))
                 elif event[0] == "error":
                     self.status.set("The checks stopped with an error.")
                     self.running = False
@@ -434,7 +455,8 @@ def main() -> None:
             pass
     # Links in the reports (MAT 5:3) open the verse in Paratext through this program: register it (again, if it moved).
     register_links()
-    CheckerWindow(root)
+    window = CheckerWindow(root)
+    window.check_for_update()
     root.mainloop()
 
 
