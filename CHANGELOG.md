@@ -16,6 +16,9 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### Fixed
 
+- **Daughter projects** (made from another project in Paratext) have no versification of their own: the checker now
+  takes the versification of the parent project, as Paratext does. Before it used English, so report links and verse
+  numbers of Biblical Terms could be one verse off in such projects (for example in Psalms).
 - **punctuation:** a mark of Scripture references (for example the range mark `–` in Project settings >
   Scripture reference settings > Reference Format) is not reported inside a reference (`5:1–3`, `12:31b–13:2`,
   `Psalms 1–41`), also when the punctuation lists reject it. In other places (`word–word`) it is still checked.

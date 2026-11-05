@@ -92,6 +92,15 @@ class SettingsTest(TempProjectMixin, unittest.TestCase):
         self.assertIn("ʼ", self.settings.punctuation_characters)
         self.assertNotIn("_", self.settings.punctuation_characters)
 
+    def test_daughter_project_takes_the_versification_of_its_parent(self):
+        for name, xml in (("Base", "<Versification>5</Versification><TranslationInfo>Standard::</TranslationInfo>"),
+                          ("Child", "<TranslationInfo>Daughter:Base:93e0</TranslationInfo>"),
+                          ("Orphan", "<TranslationInfo>Daughter:Missing:93e0</TranslationInfo>")):
+            (self.root / name).mkdir()
+            (self.root / name / "Settings.xml").write_text(f"<ScriptureText>{xml}</ScriptureText>", encoding="utf-8")
+        self.assertEqual(load_settings(self.root / "Child" / "Settings.xml").versification, "5")
+        self.assertEqual(load_settings(self.root / "Orphan" / "Settings.xml").versification, "")  # parent not here
+
     def test_settings_written_differently_in_other_projects(self):
         # e.g. the English project: space separated SentenceFinalPunctuation, no ValidPunctuation_NonText.
         path = self.root / "Other.xml"

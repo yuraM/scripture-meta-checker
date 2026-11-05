@@ -105,6 +105,24 @@ class ProjectSettings:
         return frozenset(ch for ch in chars if ch != SPACE_PLACEHOLDER and not ch.isspace())
 
 
+def project_versification(path: Path, root: ET.Element | None = None) -> str:
+    """<Versification> of Settings.xml. A daughter project (<TranslationInfo>Daughter:<parent>:…) has none: Paratext
+    uses the one of its parent project, found next to it in the projects folder. "" = not known (Paratext: English)."""
+    for _ in range(5):  # a parent may be a daughter too
+        if root is None:
+            try:
+                root = ET.parse(path).getroot()
+            except (OSError, ET.ParseError):
+                return ""
+        versification = (root.findtext("Versification") or "").strip()
+        parts = (root.findtext("TranslationInfo") or "").split(":")
+        if versification or parts[0] != "Daughter" or len(parts) < 2 or not parts[1]:
+            return versification
+        path = path.parent.parent / parts[1] / path.name
+        root = None
+    return ""
+
+
 def load_settings(path: Path) -> ProjectSettings:
     root = ET.parse(path).getroot()
 
@@ -154,7 +172,7 @@ def load_settings(path: Path) -> ProjectSettings:
         file_name_post_part=naming("FileNamePostPart", "PostPart") or ".SFM",
         file_name_pre_part=naming("FileNamePrePart", "PrePart"),
         biblical_terms_list=(root.findtext("BiblicalTermsListSetting") or "").strip(),
-        versification=(root.findtext("Versification") or "").strip(),
+        versification=project_versification(path, root),
         file_name_book_form=naming("FileNameBookNameForm", "BookNameForm") or naming("FileNameForm", "BookNameForm"),
         valid_characters=items("ValidCharacters"),
         invalid_characters=items("InvalidCharacters"),

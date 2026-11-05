@@ -419,8 +419,11 @@ base project is needed):
   Numbers are **Original** (the base translation's versification + its custom.vrs: `NEH 7:68`, `ISA 64:1` are numbered
   differently there). Bundled into the exe by build_exe.bat.
 - A project verse goes to Original with `versification.project_to_original` (its versification + its custom.vrs, whose
-  lines replace the standard lines about the same verse; `ctx.to_original`, set in `cli.run_checks`). Settings.xml
-  without `<Versification>` (daughter projects) = English; another value = "not checked". Not English: going
+  lines replace the standard lines about the same verse; `ctx.to_original`, set in `cli.run_checks`). A daughter
+  project (`<TranslationInfo>Daughter:<parent>:…`) has no `<Versification>`: like Paratext, `settings.project_versification`
+  takes the parent's from the projects folder (found 2026-11-05: a daughter of a Russian-numbered project was read as
+  English, psalm verses were one off, 5 false findings); parent not on the computer = English; another value =
+  "not checked". Not English: going
   English -> Original -> English is not exact (eng.vrs `PSA 13:0-5 = PSA 13:1-6` turns 13:6 into 13:5). custom.vrs
   matters: one project says Original in Settings.xml but numbers like English through custom.vrs (2 false findings
   without it). `to_english` (report links) still has no custom.vrs: a link knows only the project name.
