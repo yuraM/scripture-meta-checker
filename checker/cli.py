@@ -75,7 +75,7 @@ CHECK_DESCRIPTIONS = {
             f"footnote references to another verse (marks from Paratext: {places.REFERENCE_FORMAT}). "
             "Also the book of each file: one \\id, the same book as the file name, one file per book.",
     "book-titles": "The names of a book must agree. The long name \\toc1 is the main title: all \\mt lines in their "
-                   "order (\\mt2 + \\mt1). The short name \\toc2 is the running header \\h. "
+                   "order in the file, for example \\mt2 + \\mt1 + \\mt3. The short name \\toc2 is the running header \\h. "
                    f"Book names: {places.BOOK_NAMES}.",
     "special-spaces": "Spaces that do not break a line. The narrow no-break space (U+202F) is used only between two "
                       "quotation marks, inside \\fv … \\fv* (\\fv 13 \\fv*Text, no space after \\fv*), and where the "

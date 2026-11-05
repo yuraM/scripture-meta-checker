@@ -331,7 +331,7 @@ def _book_head_lines(content: str) -> list[tuple[str, str]]:
 
 
 def check_book_titles(book: str, content: str) -> Iterator[Finding]:
-    """\\toc1 = the main title (\\mt2 + \\mt1, all \\mt# lines in file order); \\toc2 = \\h."""
+    """\\toc1 = the main title (all \\mt# lines in file order: \\mt2 + \\mt1 + \\mt3); \\toc2 = \\h."""
     lines = _book_head_lines(content)
     first = {}
     for name, text in lines:

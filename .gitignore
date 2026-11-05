@@ -4,6 +4,7 @@
 /*
 !/.gitignore
 !/CLAUDE.md
+!/CHANGELOG.md
 !/main.py
 !/checker_app.py
 !/build_exe.bat

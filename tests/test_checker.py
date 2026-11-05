@@ -293,6 +293,9 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertEqual(messages(good), [])
         # \mt1 before \mt2: the title is read in file order; the intro title \imt on the same line is not part of it.
         self.assertEqual(messages("\\toc1 Книга Самуїла перша\n\\mt1 Книга Самуїла \\mt2 перша \\imt Вступ\n"), [])
+        # Three title lines: \mt2 + \mt1 + \mt3.
+        self.assertEqual(messages("\\toc1 Друга книга Самуїла пророка\n\\mt2 Друга книга\n\\mt1 Самуїла\n"
+                                  "\\mt3 пророка\n\\c 1\n"), [])
         self.assertEqual(messages("\\h Буття\n\\toc1 Книга Буття\n\\toc2 Бут.\n\\mt1 Буття\n"), [
             "the long book name \\toc1 'Книга Буття' is not the same as the main title 'Буття' (\\mt1)",
             "the short book name \\toc2 'Бут.' is not the same as the running header \\h 'Буття'",
