@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
+from checker.books import OLD_TESTAMENT
 from checker.model import CONTEXT_WIDTH, WARNING, Finding
 from checker.structure import verse_range
 from checker.versification import Verse
@@ -82,9 +83,12 @@ def _context(text: str, word: str) -> str:
 
 
 def usual_nd_words(style_refs: dict[tuple[str, str], tuple[list[Location], list[Location]]]) -> dict[str, str]:
-    """Lowercase words the project nearly always puts in \\nd -> "in \\nd in 85% of the places (4693 of 5509)"."""
+    """Lowercase words the project nearly always puts in \\nd -> "in \\nd in 85% of the places (4693 of 5509)".
+    Only the Old Testament counts: the New Testament uses the same word for Jesus, without \\nd ("Господи")."""
     usual = {}
     for (marker, word), (inside, outside) in style_refs.items():
+        inside = [place for place in inside if place[0] in OLD_TESTAMENT]
+        outside = [place for place in outside if place[0] in OLD_TESTAMENT]
         total = len(inside) + len(outside)
         if marker == "nd" and len(inside) >= MIN_INSIDE and len(inside) >= MIN_SHARE * total:
             usual[word] = f"in {round(100 * len(inside) / total)}% of the places it is ({len(inside)} of {total})"

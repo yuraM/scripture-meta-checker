@@ -426,7 +426,9 @@ base project is needed):
   without it). `to_english` (report links) still has no custom.vrs: a link knows only the project name.
 - The plain comparison "map has `\nd`, project verse has none" is mostly noise: the base translation writes "the LORD"
   where others write "he" (45 of 45 in one project, >1000 in a paraphrase). So only a word the project itself keeps in
-  `\nd` (≥20×, ≥80%; from `UsageCounter.style_refs`) and writes not small (`tu señor` = a man) is reported.
+  `\nd` (≥20×, ≥80%; from `UsageCounter.style_refs`) and writes not small (`tu señor` = a man) is reported. The share
+  counts the Old Testament only: the New Testament uses the same word for Jesus without `\nd` (`Господи` was 400 of
+  401 in the OT but below 80% in the whole Bible; +10 findings on 11 projects, all real: `Господи, подивись`, PSA 9:13).
 - Counts (added 2026-11-05, user request): a verse is reported when it has **fewer** `\nd` than the map (also 0) and such
   a word stands without `\nd` (`\nd Herren\nd* … ’Så säger Herren.’`, map 2). `UsageCounter.nd_places`: per verse of
   scripture text (no notes, no headings) the `\nd` count and the words without `\nd` that are not written small.
