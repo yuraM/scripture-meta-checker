@@ -16,6 +16,7 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 - **book-titles**: a book number written differently from the other books is shown, for example `\h 1Kings` when
   all other books have `\h 1 Kings`. `\h`, `\toc1`, `\toc2` and `\toc3` are compared each on their own, because many
   projects write the short `\toc3` without a space (`1Ki`).
+- The groups of checks in the window and the reports are now called **Unit 1 … Unit 6** (before: Stage).
 
 ### Fixed
 
