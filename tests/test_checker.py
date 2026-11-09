@@ -312,6 +312,31 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertEqual(messages("\\toc1 Рут\n\\mt1\n"), ["the main title (\\mt1) is empty; the long book name "
                                                           "\\toc1 is 'Рут'"])
 
+    def test_book_titles_number_forms(self):
+        from checker.structure import NumberForms, check_book_titles
+
+        def book(number, space, name="Самуїла", short="Сам"):
+            return f"\\h {number}{space}{name}\n\\toc2 {number}{space}{name}\n\\toc3 {number}{short}\n\\c 1\n"
+
+        forms = NumberForms()
+        books = [book(n, " ", name) for n in (1, 2) for name in ("Самуїла", "Царів", "Хронік", "Петра", "Івана")]
+        odd = book(1, "", "Тимофія")
+        for content in [*books, odd]:
+            forms.add(content)
+        self.assertEqual([f.message for f in check_book_titles("1TI", odd, forms)], [
+            "the book name \\h '1Тимофія' writes the number without a space, but 10 of 11 book names in \\h write "
+            "it with a space ('1 Самуїла')",
+            "the book name \\toc2 '1Тимофія' writes the number without a space, but 10 of 11 book names in \\toc2 "
+            "write it with a space ('1 Самуїла')",
+        ])
+        # \toc3 is compared only with \toc3 (all without a space); the usual books give nothing.
+        self.assertEqual(list(check_book_titles("1SA", books[0], forms)), [])
+        # Too few books with the usual form: nothing.
+        few = NumberForms()
+        for content in [*books[:4], odd]:
+            few.add(content)
+        self.assertEqual(list(check_book_titles("1TI", odd, few)), [])
+
     def test_rendering_pattern(self):
         from checker.terms import rendering_pattern
 

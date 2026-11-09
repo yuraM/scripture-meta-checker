@@ -31,7 +31,7 @@ from checker.parallels import PARALLEL_FILE, load_parallel_status
 from checker.settings import load_settings
 from checker.spelling import SpellingList, load_spelling_status
 from checker.stages import STAGES, in_stage_order, stage_checks
-from checker.structure import book_name_words
+from checker.structure import NumberForms, book_name_words
 from checker.terms import load_terms
 from checker.usfm import parse_usfm
 from checker.versification import project_to_original
@@ -77,6 +77,8 @@ CHECK_DESCRIPTIONS = {
             "Also the book of each file: one \\id, the same book as the file name, one file per book.",
     "book-titles": "The names of a book must agree. The long name \\toc1 is the main title: all \\mt lines in their "
                    "order in the file, for example \\mt2 + \\mt1 + \\mt3. The short name \\toc2 is the running header \\h. "
+                   "A book number is written like in the other books: '1 Kings' or '1Kings' (\\h, \\toc1, \\toc2 "
+                   "and \\toc3 each on their own). "
                    f"Book names: {places.BOOK_NAMES}.",
     "special-spaces": "Spaces that do not break a line. The narrow no-break space (U+202F) is used only between two "
                       "quotation marks, inside \\fv … \\fv* (\\fv 13 \\fv*Text, no space after \\fv*), and where the "
@@ -195,6 +197,9 @@ def run_checks(
     sources = [(path, path.read_text(encoding="utf-8-sig")) for path in sorted(project.glob(pattern))]
     ctx.book_name_words = frozenset(word for _, content in sources for word in book_name_words(content))
     ctx.book_title_words = frozenset(word for _, content in sources for word in book_name_words(content, names_only=True))
+    ctx.book_number_forms = NumberForms()
+    for _, content in sources:
+        ctx.book_number_forms.add(content)
     file_of_book: dict[str, str] = {}
     for number, (path, content) in enumerate(sources):
         if progress:

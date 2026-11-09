@@ -13,6 +13,9 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
   these verses is part of the program, so no other project is needed. Verse numbers are converted with the
   versification of the project and its own `custom.vrs`. Only words that the project itself nearly always
   puts in `\nd` are checked.
+- **book-titles**: a book number written differently from the other books is shown, for example `\h 1Kings` when
+  all other books have `\h 1 Kings`. `\h`, `\toc1`, `\toc2` and `\toc3` are compared each on their own, because many
+  projects write the short `\toc3` without a space (`1Ki`).
 
 ### Fixed
 

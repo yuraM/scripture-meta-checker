@@ -988,7 +988,8 @@ def check_usfm(book: str, content: str, ctx: CheckContext, file_name: str = "") 
 # Checks of the raw USFM file (markers, chapter and verse numbers): (book code, file content, ctx, file name).
 SOURCE_CHECKS: dict[str, Callable[..., Iterator[Finding]]] = {
     "usfm": check_usfm,
-    "book-titles": lambda book, content, ctx, file_name="": check_book_titles(book, content),
+    "book-titles": lambda book, content, ctx, file_name="": check_book_titles(
+        book, content, ctx.book_number_forms),
     "special-spaces": lambda book, content, ctx, file_name="": check_special_spaces(book, content, ctx),
 }
 # Checks that run once after all books were read.

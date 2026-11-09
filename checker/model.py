@@ -69,6 +69,9 @@ class CheckContext:
         self.book_name_words: frozenset[str] = frozenset()
         # Only the capitalized words of the book names ("Roma", not "di"): spelling does not check them.
         self.book_title_words: frozenset[str] = frozenset()
+        # How the book names of all books write the space after a book number (structure.NumberForms); filled
+        # before the checks run.
+        self.book_number_forms = None
         self.skipped_book_words: set[str] = set()  # book name words that spelling did not check
         # The checks of this run: a check may leave a problem to another one that shows the same thing.
         self.checks: frozenset[str] = frozenset()

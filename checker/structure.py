@@ -14,6 +14,7 @@ from checker.model import ERROR, WARNING, CONTEXT_WIDTH, Finding
 from checker.quotes import ISOLATED_STYLES, ISOLATED_STYLE_PREFIXES
 from checker.references import parse_reference
 from checker.settings import ReferenceFormat
+from checker.tokens import LETTER
 from checker.usfm import CHARACTER_MARKERS, MARKER_RE, NOTE_MARKERS, SKIPPED_SPAN_MARKERS, remove_attributes
 
 CHECK = "usfm"
@@ -330,9 +331,61 @@ def _book_head_lines(content: str) -> list[tuple[str, str]]:
     return lines
 
 
-def check_book_titles(book: str, content: str) -> Iterator[Finding]:
-    """\\toc1 = the main title (all \\mt# lines in file order: \\mt2 + \\mt1 + \\mt3); \\toc2 = \\h."""
+# Book name lines whose number ("1 Kings", "1Ki") must be written the same way in all books (one marker at a time:
+# \toc3 abbreviations are often written without a space while \h has one).
+NUMBER_NAME_MARKERS = ("h", "h1", "toc1", "toc2", "toc3")
+_BOOK_NUMBER_RE = re.compile(rf"(?<!\w)(\d+)([   ~]*)(?={LETTER})")
+# A way to write the number is reported when at most this share of the books use it ...
+NUMBER_FORM_MAX_SHARE = 0.1
+# ... and at least this many books use the usual way.
+NUMBER_FORM_MIN_USUAL = 5
+_SPACE_NAMES = {" ": "a space", " ": "a no-break space", " ": "a narrow no-break space", "~": "'~'"}
+
+
+@dataclass
+class NumberForms:
+    """Per marker: how book names write the space after a book number ("" = none) -> count and one example."""
+    counts: dict[str, dict[str, int]] = field(default_factory=dict)
+    examples: dict[str, dict[str, str]] = field(default_factory=dict)
+
+    def add(self, content: str) -> None:
+        for name, text in _book_head_lines(content):
+            if name in NUMBER_NAME_MARKERS:
+                for match in _BOOK_NUMBER_RE.finditer(text):
+                    space = match.group(2)
+                    counts = self.counts.setdefault(name, {})
+                    counts[space] = counts.get(space, 0) + 1
+                    self.examples.setdefault(name, {}).setdefault(space, text)
+
+
+def _number_space(space: str) -> str:
+    return "without a space" if not space else "with " + " + ".join(_SPACE_NAMES.get(ch, ch) for ch in space)
+
+
+def _number_form_findings(book: str, lines: list[tuple[str, str]], forms: NumberForms) -> Iterator[Finding]:
+    for name, text in lines:
+        counts = forms.counts.get(name)
+        if name not in NUMBER_NAME_MARKERS or not counts:
+            continue
+        usual, usual_count = max(counts.items(), key=lambda item: item[1])
+        total = sum(counts.values())
+        for match in _BOOK_NUMBER_RE.finditer(text):
+            space = match.group(2)
+            if (space != usual and usual_count >= NUMBER_FORM_MIN_USUAL
+                    and counts.get(space, 0) <= NUMBER_FORM_MAX_SHARE * total):
+                example = forms.examples[name][usual]
+                yield Finding(book, "0:0", WARNING, TITLES_CHECK, f"\\{name} {text}",
+                              f"the book name \\{name} '{text}' writes the number {_number_space(space)}, but "
+                              f"{usual_count} of {total} book names in \\{name} write it {_number_space(usual)} "
+                              f"('{example}')", "")
+
+
+def check_book_titles(book: str, content: str, forms: NumberForms | None = None) -> Iterator[Finding]:
+    """\\toc1 = the main title (all \\mt# lines in file order: \\mt2 + \\mt1 + \\mt3); \\toc2 = \\h;
+    the number of a book name written like in the other books (`forms`: all books of the project)."""
     lines = _book_head_lines(content)
+    if forms is not None:
+        yield from _number_form_findings(book, lines, forms)
     first = {}
     for name, text in lines:
         first.setdefault(name, text)
