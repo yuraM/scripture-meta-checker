@@ -884,7 +884,7 @@ class ReportTest(unittest.TestCase):
         results = [CheckResult("usfm", "", errors=3), CheckResult("spelling", "", warnings=1)]
         with tempfile.TemporaryDirectory() as folder:
             index = write_index(Path(folder), "TST", results, "").read_text(encoding="utf-8")
-            self.assertLess(index.index("Stage 2. File structure"), index.index("Stage 4. Words"))
+            self.assertLess(index.index("Unit 2. File structure"), index.index("Unit 4. Words"))
             self.assertIn("Fix them first", index)
             # Only early stages checked: nothing later to warn about.
             index = write_index(Path(folder), "TST", results[:1], "").read_text(encoding="utf-8")

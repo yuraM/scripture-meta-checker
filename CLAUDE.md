@@ -98,7 +98,7 @@ of the folder at the start; a click on a book selects/clears it; a group button 
 Extra material, groups in `checker/books.py` — selects only its group when all books are selected, adds it otherwise,
 clears it when it is already selected; all selected = no `--books`), tick checks, Run (background thread, progress bar), the HTML report opens
 in the browser.
-Checks are shown by **stage** (user decision, 2026-11-05; `checker/stages.py`, the order to fix problems: an earlier
+Checks are shown by **stage**, titled "Unit N" in the window and reports (user decisions, 2026-11-05 and 2026-11-06; `checker/stages.py`, the order to fix problems: an earlier
 stage causes false problems in later ones): 1 Project settings and lists, 2 File structure, 3 Characters and
 punctuation, 4 Words, 5 References and terms, 6 Review lists. Select all / Clear all (under the stages, above Run; user wish) and
 All/None per stage; the 6 stage boxes stand in one row and the progress bar is in the Run row, so the window is

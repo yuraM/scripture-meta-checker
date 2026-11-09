@@ -211,8 +211,8 @@ def _first_stages_note(results: list[CheckResult]) -> str:
     if not early or all(0 < stage_number(r.name) <= FIRST_STAGES for r in results):
         return ""
     names = ", ".join(html.escape(r.name) for r in early)
-    return (f"<p class=\"first\">Stages 1-{FIRST_STAGES} have errors ({names}). Fix them first: "
-            "they can cause false problems in the later stages.</p>\n")
+    return (f"<p class=\"first\">Units 1-{FIRST_STAGES} have errors ({names}). Fix them first: "
+            "they can cause false problems in the later units.</p>\n")
 
 
 def _index_rows(results: list[CheckResult]) -> str:

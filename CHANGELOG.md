@@ -6,7 +6,7 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
-- **divine-name** (stage 6, Review lists): finds the name of God (LORD) without `\nd` in verses where other
+- **divine-name** (unit 6, Review lists): finds the name of God (LORD) without `\nd` in verses where other
   translations have it in `\nd`, for example `Herren sa` in a verse where every other `Herren` is in `\nd`. It also
   compares how many times: a verse with two LORD in `\nd` elsewhere but only one `\nd` here is shown. Psalm titles are
   checked too. Verses with "the Lord, the LORD" (Adonai) allow one word for both. The list of

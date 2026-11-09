@@ -9,15 +9,15 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Stage 1. Project settings and lists", ("lists", "approvals", "term-lists")),
-    ("Stage 2. File structure", ("usfm", "book-titles", "normalization", "special-spaces")),
-    ("Stage 3. Characters and punctuation",
+    ("Unit 1. Project settings and lists", ("lists", "approvals", "term-lists")),
+    ("Unit 2. File structure", ("usfm", "book-titles", "normalization", "special-spaces")),
+    ("Unit 3. Characters and punctuation",
      ("characters", "scripts", "punctuation", "spacing", "numbers", "quotes", "pairs", "paragraph-final")),
-    ("Stage 4. Words",
+    ("Unit 4. Words",
      ("spelling", "mixed-capitalization", "capitalization", "repeated-words", "ordinals", "hyphenation")),
-    ("Stage 5. References and terms",
+    ("Unit 5. References and terms",
      ("references", "footnotes", "terms", "parallel-changes", "parallel-differences")),
-    ("Stage 6. Review lists", ("variants", "name-case", "styled-words", "divine-name", "unused")),
+    ("Unit 6. Review lists", ("variants", "name-case", "styled-words", "divine-name", "unused")),
 )
 # Stages whose errors are named at the top of the report: fix them before the others.
 FIRST_STAGES = 2

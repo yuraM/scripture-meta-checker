@@ -111,7 +111,7 @@ class CheckerWindow:
         self.selected: dict[str, BooleanVar] = {}
         for index, (title, names) in enumerate(STAGES):
             row, column = divmod(index, STAGE_COLUMNS)
-            # "Stage 3. Characters and punctuation" on two lines: the boxes stand in one row.
+            # "Unit 3. Characters and punctuation" on two lines: the boxes stand in one row.
             number, _, name = title.partition(". ")
             label = ttk.Label(checks, text=f"{number}\n{name}", wraplength=STAGE_WIDTH)
             box = ttk.LabelFrame(checks, labelwidget=label, padding=(4, 2))
