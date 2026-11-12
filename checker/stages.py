@@ -23,6 +23,11 @@ STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
 # Groups inside a unit (unit number, title, checks in the order to fix their problems): the window shows them
 # folded, the reports under their own heading. Their checks are also in STAGES.
 GROUPS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
+    (3, "Quotes and brackets", ("quotes", "pairs")),
+    (4, "Capital letters", ("mixed-capitalization", "capitalization")),
+    (5, "Parallel passages", ("parallel-changes", "parallel-differences")),
+    (6, "Names", ("variants", "name-case")),
+    (6, "Divine name and styles", ("styled-words", "divine-name")),
     (6, "Poetry", ("poetry-numbers", "poetry-two-sentences")),
 )
 # Stages whose errors are named at the top of the report: fix them before the others.

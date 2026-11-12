@@ -31,6 +31,8 @@ PARATEXT_FOLDERS = ("C:/My Paratext 9 Projects", "C:/My Paratext 8 Projects", "D
 # Window and exe icon; build_exe.bat puts it next to this module inside the exe.
 ICON = Path(__file__).with_name("icon.ico")
 FROZEN = bool(getattr(sys, "frozen", False))  # running as checker.exe
+STAGE_COLUMNS = 6  # stage boxes per row: all in one row keeps the window low
+STAGE_WIDTH = 160  # pixels for the title of a stage box
 REPORTS_FOLDER = Path.home() / "Documents" / "Scripture checker reports"
 
 
@@ -110,33 +112,45 @@ class CheckerWindow:
         frame.rowconfigure(4, weight=1)
         self.selected: dict[str, BooleanVar] = {}
         self.folds: list[_Fold] = []
-        # Each unit is a folded list: a click on its title shows the checks, the box on the right selects all of
-        # them. Units 1-3 on the left, 4-6 on the right: read down, then on the right.
-        rows = (len(STAGES) + 1) // 2
         for index, (title, names) in enumerate(STAGES):
-            column, row = divmod(index, rows)
-            unit = self._fold(checks, title, names)
-            unit.grid(row=row, column=column, sticky="new", padx=(0, 12) if column == 0 else 0, pady=1)
-            checks.columnconfigure(column, weight=1, uniform="unit")
-            # In the order of STAGES; a group (folded too, its checks numbered in the order to fix them) stands
-            # where its first check is.
+            row, column = divmod(index, STAGE_COLUMNS)
+            # "Unit 3. Characters and punctuation" on two lines: the boxes stand in one row.
+            number, _, name = title.partition(". ")
+            label = ttk.Label(checks, text=f"{number}\n{name}", wraplength=STAGE_WIDTH)
+            box = ttk.LabelFrame(checks, labelwidget=label, padding=(4, 2))
+            box.grid(row=row, column=column, sticky="nsew", padx=(0, 4))
+            box.columnconfigure(0, weight=1)
+            checks.columnconfigure(column, weight=1, uniform="stage")
+            # In the order of STAGES. A group is a folded list at the place of its first check: a click on its
+            # name shows its checks (numbered in the order to fix them), the box on the right selects them all.
             placed: set[str] = set()
-            for line, name in enumerate(names):
+            line = 0
+            for name in names:
                 group = group_of(name)
                 if not group:
-                    self._check_button(unit.body, name, name).grid(row=line, column=0, sticky="w")
+                    self._check_button(box, name, name).grid(row=line, column=0, sticky="w")
                 elif group not in placed:
                     placed.add(group)
                     group_names = next(checks for _, title, checks in GROUPS if title == group)
-                    fold = self._fold(unit.body, f"{group}: fix in this order", group_names)
+                    fold = self._fold(box, group, group_names)
                     fold.grid(row=line, column=0, sticky="ew")
                     for step, check in enumerate(group_names, start=1):
                         self._check_button(fold.body, check, f"{step}. {check}").grid(row=step, column=0, sticky="w")
-            unit.body.columnconfigure(0, weight=1)
+                else:
+                    continue
+                line += 1
+            box.rowconfigure(line, weight=1)
+            buttons = ttk.Frame(box)
+            buttons.grid(row=line + 1, column=0, sticky="sw", pady=(4, 2))
+            ttk.Button(buttons, text="All", width=5,
+                       command=lambda n=names: self._set(n, True)).grid(row=0, column=0)
+            ttk.Button(buttons, text="None", width=5,
+                       command=lambda n=names: self._set(n, False)).grid(row=0, column=1, padx=2)
         self._refresh_folds()
         # Under the stages, above Run: the buttons for all checks.
         all_buttons = ttk.Frame(checks)
-        all_buttons.grid(row=rows, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        all_buttons.grid(row=len(STAGES) // STAGE_COLUMNS + 1, column=0, columnspan=STAGE_COLUMNS, sticky="w",
+                         pady=(6, 0))
         everything = [name for _, names in STAGES for name in names]
         ttk.Button(all_buttons, text="Select all", command=lambda: self._set(everything, True)).grid(row=0, column=0)
         ttk.Button(all_buttons, text="Clear all",
@@ -482,21 +496,22 @@ class BookPicker(ttk.LabelFrame):
 
 
 class _Fold(ttk.Frame):
-    """A folded list of checks: "▸ title (2 of 8)" on the left, a box on the right that selects all of them
+    """A folded group of checks: "▸ Poetry (1/2)" on the left, a box on the right that selects all of them
     (it shows a dash when only some are selected). A click on the title shows or hides the list."""
 
     def __init__(self, parent, title: str, names: tuple[str, ...], set_checks) -> None:
         super().__init__(parent)
         self.title, self.names, self.set_checks = title, names, set_checks
         self.columnconfigure(0, weight=1)
-        self.toggle = ttk.Label(self, cursor="hand2")
+        self.toggle = ttk.Label(self, cursor="hand2", foreground="#0a64c8")
         self.toggle.grid(row=0, column=0, sticky="w")
         self.toggle.bind("<Button-1>", lambda _: self.flip())
         self.var = BooleanVar(value=False)
         self.box = ttk.Checkbutton(self, variable=self.var, command=lambda: self.set_checks(self.names, self.var.get()))
         self.box.grid(row=0, column=1, sticky="e")
         _Tooltip(self.box, "Select or clear all checks of this list")
-        self.body = ttk.Frame(self, padding=(16, 0, 0, 2))
+        self.body = ttk.Frame(self, padding=(12, 0, 0, 2))
+        _Tooltip(self.toggle, f"{title}: fix the problems in this order, from 1 down")
         self.open = False
         self.chosen = 0
 
@@ -511,7 +526,7 @@ class _Fold(ttk.Frame):
     def show(self, chosen: int) -> None:
         self.chosen = chosen
         arrow = "▾" if self.open else "▸"
-        self.toggle.configure(text=f"{arrow} {self.title}  ({chosen} of {len(self.names)})")
+        self.toggle.configure(text=f"{arrow} {self.title} ({chosen}/{len(self.names)})")
         self.var.set(chosen == len(self.names))
         self.box.state(["alternate"] if 0 < chosen < len(self.names) else ["!alternate"])
 
