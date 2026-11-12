@@ -42,6 +42,11 @@ TEXT_CHECKS = [*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS]
 
 # Shown at the top of each report. Keep the English simple: many readers know little English.
 CHECK_DESCRIPTIONS = {
+    "poetry-numbers": "A number written with digits (12, or the digits of another script) in a poetry line "
+                      "\\q, \\q1, \\q2. Poetry usually writes numbers in words. References (40:8) are not counted.",
+    "poetry-two-sentences": "A long poetry line (longer than 95% of the poetry lines of this project) with a full "
+                            "stop, ! or ? inside it: maybe it should be two lines. Two short sentences in one line "
+                            "are normal.",
     "characters": f"Every character of the text must be marked correct in Paratext: {places.inventory(places.CHARACTERS)}. "
                   "'not allowed' = marked wrong there; 'not in the allowed list' = not marked yet.",
     "punctuation": "Punctuation between two words must be marked correct in Paratext: "

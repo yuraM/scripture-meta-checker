@@ -2,6 +2,19 @@
 
 Changes of the Scripture checker by release. Releases: https://github.com/yuraM/scripture-meta-checker/releases
 
+## Unreleased
+
+### What's new
+
+- **Groups inside a unit:** a unit box in the window can have a folded group of checks (for example **▸ Poetry** in
+  Unit 6). Click it to see its checks; they are numbered in the order to fix the problems. The report shows the group
+  with its own heading.
+- **poetry-numbers** (Unit 6, Poetry 1): a number written with digits in a poetry line `\q1`, `\q2`, for example
+  `40,000` in a song. Poetry usually writes numbers in words. References (`40:8`) are not shown.
+- **poetry-two-sentences** (Unit 6, Poetry 2): a long poetry line with a full stop, `!` or `?` inside it, for example
+  "…from the ground. You will eat plants…". Maybe the line should be two lines. "Long" is decided by the project:
+  longer than 95% of its poetry lines.
+
 ## 1.0.2 (2026-11-12)
 
 ### What's new

@@ -40,6 +40,8 @@ CHECKS = [
     "name-case",             # word usually capitalized mid-sentence but not here (or the reverse)
     "styled-words",          # word usually in \nd but not here (or the reverse)
     "divine-name",           # the divine name without \nd where translations have LORD in \nd
+    "poetry-numbers",        # digits in poetry lines \q1 \q2 (poetry usually writes numbers in words)
+    "poetry-two-sentences",  # long poetry line with a sentence end inside: maybe two lines
     "references",            # references: chapters/verses that do not exist, marks not from Settings.xml
     "footnotes",             # footnotes built differently from similar ones (Lit.: \fq vs \fqa, missing full stop)
     "parallel-changes",      # ParallelPassageStatus.xml: approved parallel verses that were changed later

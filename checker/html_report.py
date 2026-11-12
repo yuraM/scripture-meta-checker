@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from checker.paratext_link import PROTOCOL
-from checker.stages import FIRST_STAGES, STAGES, stage_number
+from checker.stages import FIRST_STAGES, GROUPS, STAGES, group_of, stage_number
 
 PAGE_SIZE = 200  # blocks shown at once; large reports (60 000 blocks) would make the browser slow
 HTML_FOLDER = "html"
@@ -59,6 +59,7 @@ font-variant-numeric:tabular-nums}
 th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
 td.n,th.n{text-align:right}
 tr.stage th{background:var(--bg);padding-top:14px;font-size:.95rem}
+tr.group th{background:var(--bg);font-weight:normal;font-style:italic;padding-left:18px}
 .first{background:var(--err-bg);color:var(--err);border-left:4px solid var(--err);padding:8px 12px;max-width:75ch}
 .e{color:var(--err);font-weight:600}.w{color:var(--warn);font-weight:600}.z{color:var(--muted)}
 .tools{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:16px 0}
@@ -216,14 +217,21 @@ def _first_stages_note(results: list[CheckResult]) -> str:
 
 
 def _index_rows(results: list[CheckResult]) -> str:
-    rows, stage = [], None
+    rows, stage, group = [], None, ""
     for r in results:
         number = stage_number(r.name)
         if number != stage:
-            stage = number
+            stage, group = number, ""
             title = STAGES[number - 1][0] if number else "Other checks"
             rows.append(f'<tr class="stage"><th colspan="5">{html.escape(title)}</th></tr>')
-        rows.append(f'<tr><td><a href="{HTML_FOLDER}/{html.escape(r.name)}.html">{html.escape(r.name)}</a></td>'
+        # A group of a unit has its own heading; its checks are numbered in the order to fix them.
+        if group_of(r.name) != group:
+            group = group_of(r.name)
+            if group:
+                rows.append(f'<tr class="group"><th colspan="5">{html.escape(group)}: fix in this order</th></tr>')
+        step = next((f"{checks.index(r.name) + 1}. " for _, title, checks in GROUPS
+                     if title == group and r.name in checks), "")
+        rows.append(f'<tr><td>{step}<a href="{HTML_FOLDER}/{html.escape(r.name)}.html">{html.escape(r.name)}</a></td>'
                     f'{_counts(r)}<td><a class="muted" href="{TXT_FOLDER}/{html.escape(r.name)}.txt">txt</a></td></tr>')
     return "\n".join(rows)
 

@@ -100,7 +100,7 @@ clears it when it is already selected; all selected = no `--books`), tick checks
 in the browser.
 Checks are shown by **stage**, titled "Unit N" in the window and reports (user decisions, 2026-11-05 and 2026-11-06; `checker/stages.py`, the order to fix problems: an earlier
 stage causes false problems in later ones): 1 Project settings and lists, 2 File structure, 3 Characters and
-punctuation, 4 Words, 5 References and terms, 6 Review lists. Select all / Clear all (under the stages, above Run; user wish) and
+punctuation, 4 Words, 5 References and terms, 6 Review lists. **Groups inside a unit** (user decision 2026-11-12, `stages.GROUPS`: unit, title, checks in the order to fix them; the checks are also in `STAGES`): the window shows a folded line `▸ Poetry (2)` in the unit box, a click shows the checks numbered `1.` `2.`; `index.html` has a heading `Poetry: fix in this order` and the numbers. Planned groups (2026-11-12, from the guide *Translation Checks for Technical Managers*; each measured before it is added; messages only say what to change, the text is never changed): Unit 3 "More characters" (digits of another system, `’` -> `ʼ`, `1/2` -> `1⁄2`, quote closed before a continuer of the same speaker), Unit 5 "More references" (`\x` to its own verse, `Jude 1:3` / `Jude 3`, very long term renderings), Unit 6 "Poetry" in this order: digits, lead-in punctuation, missing full stop at a line end (`,` + a capital that is not a name), two sentences in a long line, very long line, verse number inside a line, `\q2` after a full stop, `\b` at a chapter end. Select all / Clear all (under the stages, above Run; user wish) and
 All/None per stage; the 6 stage boxes stand in one row and the progress bar is in the Run row, so the window is
 about 800 px high with a project (user wish: fit small screens). Nothing is
 selected when the window opens and Run is disabled until a check is ticked; the choice stays while the window is open
@@ -149,6 +149,7 @@ wordlist/
 │   ├── places.py        # names of Paratext windows/menus used in report texts
 │   ├── approvals.py     # approvals check: approved list entries that look wrong
 │   ├── footnotes.py     # footnotes check: notes built differently from similar ones (raw \f … \f*)
+│   ├── poetry.py        # poetry-numbers, poetry-two-sentences (Unit 6 group Poetry)
 │   ├── divine_name.py   # divine-name check: the divine name without \nd in verses of nd_verses.txt
 │   ├── nd_verses.txt    # verses (Original numbers) where a base translation has LORD in \nd; numbers only
 │   ├── spaces.py        # special-spaces check: U+202F, \fv … \fv*, abbreviations with ~ (raw file)
@@ -249,6 +250,8 @@ wordlist/
 | `name-case` (opt-in) | text frequencies | — | word capitalized mid-sentence in ≤5% of ≥10 occurrences (or lowercase in ≤5%); sentence starts, words after quotes/brackets, headings and all-caps words are not counted |
 | `styled-words` (opt-in) | text + `\nd` spans | — | word in `\nd` in ≤5% of ≥10 occurrences, or without `\nd` in ≤5%; notes are not counted |
 | `divine-name` (opt-in) | `checker/nd_verses.txt` + text `\nd` spans + versification | — | a word the project puts in `\nd` ≥20× and in ≥80% of its places is without `\nd` (and not written small) in a verse that has fewer `\nd` (also none) than an English base translation has LORD in `\nd` there (the map) |
+| `poetry-numbers` (opt-in, Unit 6 > Poetry 1) | text of `\q`, `\q#`, `\qm#`, `\qc` (not `\qr \qa \qd`, not front/back matter or `XXA…`) | — | number written with digits (any script) in a poetry line; references (`40:8`), verse ranges (`7–8`) and `\xt` are skipped (added 2026-11-12, user request; measured on 50 projects: 0 in most, real ones like `40,000` in JDG 5:8, `77 veces`; a project that writes all numbers in digits gets ~30) |
+| `poetry-two-sentences` (opt-in, Unit 6 > Poetry 2) | the same lines + SentenceFinalPunctuation | — | poetry line longer than 95% of the project's poetry lines (≥100 lines, at least 40 characters) with a sentence end inside (only marks named FULL STOP / EXCLAMATION / QUESTION / DANDA), ≥20 characters on each side; not when a dash or a small letter follows (speaker words: `…Меня? — возвещает`), not after an abbreviation (added 2026-11-12, from a regex of a checking guide; measured on 50 projects: 0-17, a simplified-English project 66) |
 | `references` (opt-in) | `\xt`, `\fr`, `\xo` + `\toc1-3` of all books + ChapterVerseSeparator, RangeIndicator, SequenceIndicator, ChapterRangeSeparator, ChapterNumberSeparator, BookSequenceSeparator | `\xt` points to a chapter/verse that does not exist (every part, verses after the sequence mark, range ends, link targets); wrong mark in `\xt`/`\fr`/`\xo`; range that goes backwards | book name not found in any `\toc1-3`; link target book not in the project; text and link show different numbers (`8|JER 22:28`); non-ASCII letter in a link; number with no chapter after the chapter mark (`13፥2፤ 12`: verse or chapter? a person decides) |
 | `terms` (opt-in) | terms list (BiblicalTermsListSetting: project folder or Paratext program folder; ProjectBiblicalTerms.xml) + TermRenderings.xml + eng.vrs/custom.vrs | — | clear cases only: none of the renderings of a term is in a verse of the term, while the term is rendered in all other verses (missing in ≤2 verses and ≤5%); rendering found nowhere in the text (`cлов` with Latin `c`). The hidden rest is counted in the report note |
 | `term-lists` (opt-in) | the same files | — | verse marked OK without a rendering (Denial) where the rendering is there now, or which is not a verse of the term; rendering guessed by Paratext (only terms of the project list) |
@@ -283,7 +286,7 @@ book in order, because a quote may span paragraphs and chapters. Design:
 - Notes quote fragments of the text (`Or “I have been given … to`): no level check, all findings
   are warnings marked "(in a footnote)".
 
-`unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `divine-name`, `numbers`, `footnotes`, `references`, `parallel-changes`,
+`unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `divine-name`, `numbers`, `footnotes`, `references`, `poetry-numbers`, `poetry-two-sentences`, `parallel-changes`,
 `parallel-differences`, `terms` and `term-lists` are project-level checks (`PROJECT_CHECKS`): they run once after
 all books, using `UsageCounter`. They are not in the default run (`unused` ≈22k findings,
 mostly SpellingStatus `R` words and hyphenation entries) and must be requested with

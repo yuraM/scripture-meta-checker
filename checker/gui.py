@@ -21,7 +21,7 @@ from checker.cli import (
 )
 from checker.html_report import TXT_FOLDER
 from checker.paratext_link import register as register_links
-from checker.stages import STAGES
+from checker.stages import GROUPS, STAGES, group_of
 from checker.updates import Release, UpdateError, newer_release, remove_old, update
 from checker.version import VERSION
 
@@ -119,15 +119,30 @@ class CheckerWindow:
             box = ttk.LabelFrame(checks, labelwidget=label, padding=(4, 2))
             box.grid(row=row, column=column, sticky="nsew", padx=(0, 4))
             checks.columnconfigure(column, weight=1, uniform="stage")
-            for line, name in enumerate(names):
-                var = self.selected[name] = BooleanVar(value=False)
-                var.trace_add("write", lambda *_: self._refresh_run())
-                button = ttk.Checkbutton(box, text=name, variable=var)
-                button.grid(row=line, column=0, sticky="w")
-                _Tooltip(button, CHECK_DESCRIPTIONS.get(name, ""))
-            box.rowconfigure(len(names), weight=1)
+            line = 0
+            for name in names:
+                if group_of(name):
+                    continue
+                self._check_button(box, name, name).grid(row=line, column=0, sticky="w")
+                line += 1
+            # Groups of the unit: folded, a click shows their checks, numbered in the order to fix them.
+            for unit, group, group_names in GROUPS:
+                if unit != index + 1:
+                    continue
+                inner = ttk.Frame(box)
+                for step, name in enumerate(group_names, start=1):
+                    self._check_button(inner, name, f"{step}. {name}").grid(row=step, column=0, sticky="w",
+                                                                           padx=(12, 0))
+                toggle = ttk.Label(box, text=f"▸ {group} ({len(group_names)})", foreground="#0a64c8",
+                                   cursor="hand2")
+                toggle.grid(row=line, column=0, sticky="w", pady=(2, 0))
+                toggle.bind("<Button-1>", lambda _, t=toggle, f=inner, g=group, n=len(group_names), r=line + 1:
+                            self._fold(t, f, g, n, r))
+                _Tooltip(toggle, f"{group}: fix the problems in this order, from 1 down")
+                line += 2
+            box.rowconfigure(line, weight=1)
             buttons = ttk.Frame(box)
-            buttons.grid(row=len(names) + 1, column=0, sticky="sw", pady=(4, 2))
+            buttons.grid(row=line + 1, column=0, sticky="sw", pady=(4, 2))
             ttk.Button(buttons, text="All", width=5,
                        command=lambda n=names: self._set(n, True)).grid(row=0, column=0)
             ttk.Button(buttons, text="None", width=5,
@@ -205,6 +220,23 @@ class CheckerWindow:
             except UpdateError as error:
                 self.events.put(("update-error", str(error)))
         threading.Thread(target=work, daemon=True).start()
+
+    def _check_button(self, parent, name: str, text: str) -> ttk.Checkbutton:
+        var = self.selected[name] = BooleanVar(value=False)
+        var.trace_add("write", lambda *_: self._refresh_run())
+        button = ttk.Checkbutton(parent, text=text, variable=var)
+        _Tooltip(button, CHECK_DESCRIPTIONS.get(name, ""))
+        return button
+
+    @staticmethod
+    def _fold(toggle: ttk.Label, inner: ttk.Frame, group: str, count: int, row: int) -> None:
+        """Show or hide the checks of a group (a folded group keeps the window low)."""
+        if inner.winfo_ismapped():
+            inner.grid_remove()
+            toggle.configure(text=f"▸ {group} ({count})")
+        else:
+            inner.grid(row=row, column=0, sticky="w")
+            toggle.configure(text=f"▾ {group} ({count})")
 
     def _set(self, names, value: bool) -> None:
         for name in names:

@@ -17,10 +17,21 @@ STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
      ("spelling", "mixed-capitalization", "capitalization", "repeated-words", "ordinals", "hyphenation")),
     ("Unit 5. References and terms",
      ("references", "footnotes", "terms", "parallel-changes", "parallel-differences")),
-    ("Unit 6. Review lists", ("variants", "name-case", "styled-words", "divine-name", "unused")),
+    ("Unit 6. Review lists", ("variants", "name-case", "styled-words", "divine-name",
+                             "poetry-numbers", "poetry-two-sentences", "unused")),
+)
+# Groups inside a unit (unit number, title, checks in the order to fix their problems): the window shows them
+# folded, the reports under their own heading. Their checks are also in STAGES.
+GROUPS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
+    (6, "Poetry", ("poetry-numbers", "poetry-two-sentences")),
 )
 # Stages whose errors are named at the top of the report: fix them before the others.
 FIRST_STAGES = 2
+
+
+def group_of(check: str) -> str:
+    """Title of the group of `check`; "" = in no group."""
+    return next((title for _, title, checks in GROUPS if check in checks), "")
 
 
 def stage_number(check: str) -> int:

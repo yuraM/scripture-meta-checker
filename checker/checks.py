@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable, Iterator
 from functools import lru_cache
 
 from checker import places
+from checker.poetry import check_poetry_numbers, check_poetry_two_sentences, is_poetry_line
 from checker.approvals import check_approvals
 from checker.divine_name import VerseNd, check_divine_name
 from checker.footnotes import Note, check_footnotes, read_notes
@@ -528,6 +529,7 @@ class UsageCounter:
         # each as (book, chapter:verse, number, context).
         self.four_digit: tuple[list[tuple[str, str, str, str]], list[tuple[str, str, str, str]]] = ([], [])
         self.footnotes: list[Note] = []  # footnotes of the checked books, read from the raw files
+        self.poetry_lines: list[Analysis] = []  # \q, \q1, \q2 … lines of the checked books (checker/poetry.py)
         # (book, "chapter:verse") -> \nd count and words without \nd in the scripture text of the verse.
         self.nd_places: dict[tuple[str, str], VerseNd] = {}
 
@@ -628,6 +630,8 @@ class UsageCounter:
             if ending and not HEADING_STYLE_RE.match(segment.style):
                 self.paragraph_endings[ending[0]] += 1
         self._add_verse_texts(analysis)
+        if is_poetry_line(analysis):
+            self.poetry_lines.append(analysis)
         self.characters.update(cluster for _, cluster in graphemes(text))
         for index, run in enumerate(runs):
             if run.is_word:
@@ -1056,6 +1060,8 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "parallel-differences": check_parallel_differences,
     "terms": check_terms,
     "term-lists": check_term_lists,
+    "poetry-numbers": lambda usage, ctx: check_poetry_numbers(usage.poetry_lines, ctx),
+    "poetry-two-sentences": lambda usage, ctx: check_poetry_two_sentences(usage.poetry_lines, ctx),
 }
 # Checks that need the Biblical Terms files (read only when one of them runs).
 TERM_CHECKS = frozenset({"terms", "term-lists"})

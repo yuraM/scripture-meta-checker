@@ -185,6 +185,38 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertIn("12 of 13", findings[0].message)
         self.assertIn("4000", findings[0].context)
 
+    def _poetry_usage(self, usfm: str):
+        from checker.checks import UsageCounter
+        usage = UsageCounter()
+        for segment in parse_usfm(usfm, "TST"):
+            usage.add(self.ctx.analyse(segment), self.ctx)
+        return usage
+
+    def test_poetry_numbers(self):
+        from checker.poetry import check_poetry_numbers
+        usage = self._poetry_usage(
+            "\\id TST\n\\c 1\n\\p \\v 1 Їх було 30 у прозі.\n\\q1 \\v 2 Він узяв 30 срібняків,\n"
+            "\\q2 як сказано в 40:8 і у віршах 7–8, \\xt 5:3\\xt*\n\\qr 12\n\\q1 ٣٠ динарів")
+        findings = list(check_poetry_numbers(usage.poetry_lines, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in findings], [("1:2", "30"), ("1:2", "٣٠")])
+        # Extra material uses \q for other things.
+        extra = self._poetry_usage("\\id XXA\n\\c 1\n\\q1 \\v 1 Прочитайте 30 віршів.")
+        self.assertEqual(extra.poetry_lines, [])
+
+    def test_poetry_two_sentences(self):
+        from checker import poetry
+        short = "".join(f"\\q1 \\v {n} Короткий рядок поезії номер {n}.\n" for n in range(1, 120))
+        long_line = "Довгий рядок поезії, у якому сказано багато. Друге речення теж тут у рядку."
+        speaker = "Довгий рядок поезії, у якому сказано багато? — каже Господь Бог цього разу."
+        two_short = "Слухайте, царі! Слухайте, князі!"
+        usage = self._poetry_usage(f"\\id TST\n\\c 1\n{short}\\q1 \\v 120 {long_line}\n"
+                                   f"\\q1 \\v 121 {speaker}\n\\q1 \\v 122 {two_short}")
+        findings = list(poetry.check_poetry_two_sentences(usage.poetry_lines, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in findings], [("1:120", "сказано багато.")])
+        self.assertIn("new line after 'сказано багато.'", findings[0].message)
+        few = self._poetry_usage(f"\\id TST\n\\c 1\n\\q1 \\v 1 {long_line}")  # too few lines to know "long"
+        self.assertEqual(list(poetry.check_poetry_two_sentences(few.poetry_lines, self.ctx)), [])
+
     def test_spelling_leaves_mixed_case_to_its_check(self):
         text = "\\p Бет-Ель ен-Мішпату слово"
         self.assertEqual([f.item for f in self.run_check("spelling", text)], ["Бет-Ель", "ен-Мішпату"])
@@ -912,6 +944,10 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(sorted(staged), sorted({*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS, *PROJECT_CHECKS}))
         self.assertEqual(in_stage_order(["unused", "spelling", "lists", "spelling"]), ["lists", "spelling", "unused"])
         self.assertEqual(stage_checks([2]), list(STAGES[1][1]))
+        from checker.stages import GROUPS, group_of
+        for unit, title, names in GROUPS:  # a group's checks are in its unit, in the same order
+            self.assertEqual([n for n in STAGES[unit - 1][1] if n in names], list(names))
+            self.assertEqual({group_of(n) for n in names}, {title})
 
     def test_stage_option(self):
         from checker.cli import build_parser
