@@ -6,10 +6,17 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
-- **Groups of checks:** in the window, checks that belong together are a folded group inside their unit:
-  Quotes and brackets, Capital letters, Parallel passages, Names, Divine name and styles, Poetry. Click the name of a
+- **Groups of checks:** in the window, checks that belong together are a folded group inside their unit, for
+  example Characters, Punctuation, Numbers and spaces, References, Poetry. Click the name of a
   group to see its checks; they are numbered in the order to fix the problems. The box on the right of the group
   selects all its checks (a dash = only some are selected). The report shows each group with its own heading.
+- **apostrophes** (Unit 3): a sign between two letters that is not the one the project nearly always uses
+  (`ng'ombe` where the project writes `ʼ`).
+- **digit-systems** (Unit 3): digits of another system than most numbers of the project (`۲۷` among `27`).
+- **fractions** (Unit 3): `1/2` where the project writes most fractions with the fraction slash: `1⁄2`.
+- **self-references** (Unit 5): a cross reference `\x` that points to the verse it stands in.
+- **one-chapter-books** (Unit 5): references to books with one chapter written two ways (`Jude 1:3` and `Jude 3`).
+- **term-renderings** (Unit 1): a rendering in Biblical Terms with more than 5 words.
 - **poetry-numbers** (Unit 6, Poetry 1): a number written with digits in a poetry line `\q1`, `\q2`, for example
   `40,000` in a song. Poetry usually writes numbers in words. References (`40:8`) are not shown.
 - **poetry-line-ends** (Unit 6, Poetry 2): a poetry line ends with a comma, and the next line starts with a

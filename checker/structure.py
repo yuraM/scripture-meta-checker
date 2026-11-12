@@ -53,6 +53,7 @@ class XtReference:
     text: str
     context: str
     marker: str = "xt"
+    note: str = ""  # the note it stands in: "x" (cross reference), "f" (footnote), "" = in the text
 
 
 @dataclass
@@ -212,7 +213,8 @@ class _StructureScanner:
         """\\fr / \\xo must name the verse the note is in; \\xt references are collected."""
         if name == "xt":
             if text.strip():
-                self.index.references.append(XtReference(self.book, self.ref, text.strip(), self.context(offset)))
+                self.index.references.append(XtReference(self.book, self.ref, text.strip(), self.context(offset),
+                                                          note=self.note.name if self.note else ""))
             return
         if not self.numbered or not self.chapter:
             return

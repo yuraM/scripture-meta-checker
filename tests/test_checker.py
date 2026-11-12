@@ -252,6 +252,28 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         found = list(poetry.check_poetry_long_lines(usage.poetry_lines, self.ctx))
         self.assertEqual([f.ref for f in found], ["1:150"])
 
+    def test_rare_forms(self):
+        from checker import forms
+        many = " ".join(f"\\v {n} Було {n} людей, мірка 1⁄2 і 1⁄4, імʼя." for n in range(1, 25))
+        usage = self._poetry_usage(
+            f"\\id TST\n\\c 1\n\\p {many} \\v 25 Було ۲۷ людей і 1/2 мірки, ім'я. Copyright 1985 ©")
+        digits = list(forms.check_digit_systems(usage.segments, self.ctx))
+        self.assertEqual([(f.item, f.ref) for f in digits], [("۲۷", "1:25")])
+        self.assertIn("write '27'", digits[0].message)
+        fractions = list(forms.check_fractions(usage.segments, self.ctx))
+        self.assertEqual([f.item for f in fractions], ["1/2"])
+        apostrophes = list(forms.check_apostrophes(usage.segments, self.ctx))
+        self.assertEqual([f.item for f in apostrophes], ["'"])
+        self.assertIn("in 'ім'я'", apostrophes[0].message)
+        # A project that writes its fractions with "/" is not told to change them.
+        slash = self._poetry_usage("\\id TST\n\\c 1\n\\p \\v 1 1/2 і 1/3 і 1⁄4")
+        self.assertEqual(list(forms.check_fractions(slash.segments, self.ctx)), [])
+
+    def test_term_rendering_words(self):
+        from checker.terms import rendering_words
+        self.assertEqual(rendering_words("земл*, де тече молоко і мед"), 6)
+        self.assertEqual(rendering_words("Бог(у) ** Ізраїля"), 2)
+
     def test_spelling_leaves_mixed_case_to_its_check(self):
         text = "\\p Бет-Ель ен-Мішпату слово"
         self.assertEqual([f.item for f in self.run_check("spelling", text)], ["Бет-Ель", "ен-Мішпату"])
@@ -573,6 +595,26 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         findings = list(check_references(usage, self.ctx))
         self.assertEqual([(f.severity, f.item) for f in findings],
                          [(ERROR, "GEN 2:5"), (ERROR, "EXO 3:1"), (WARNING, "Лев."), (ERROR, "GEN 1:3")])
+
+    def test_self_references(self):
+        from checker.checks import check_self_references
+        usage = UsageCounter()
+        usage.add_source("GEN", "\\id GEN\n\\toc3 Бут.\n\\c 1\n\\p \\v 1 а\n"
+                                "\\v 2 б\\x - \\xo 1:2 \\xt Бут. 1:1-2\\xt*\\x*"            # a cross reference to itself
+                                "\\f + \\fr 1:2 \\ft Деякі рукописи без \\xt 1:2\\xt*\\f*", self.ctx)  # a footnote may
+        findings = list(check_self_references(usage, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in findings], [("1:2", "Бут. 1:1-2")])
+
+    def test_one_chapter_books(self):
+        from checker.checks import check_one_chapter_books
+        usage = UsageCounter()
+        usage.add_source("JUD", "\\id JUD\n\\toc3 Юд.\n\\c 1\n\\p " + " ".join(f"\\v {n} а" for n in range(1, 15)),
+                         self.ctx)
+        usage.add_source("GEN", "\\id GEN\n\\toc3 Бут.\n\\c 1\n\\p \\v 1 а\\x - \\xt Юд. 3; Юд. 5; Юд. 8\\xt*\\x*"
+                                "\\x - \\xt Юд. 1:9\\xt*\\x*", self.ctx)
+        findings = list(check_one_chapter_books(usage, self.ctx))
+        self.assertEqual([f.item for f in findings], ["Юд. 1:9"])
+        self.assertIn("write 'Юд. 9'", findings[0].message)
 
     def test_reference_book_names_with_vowel_signs(self):
         # Devanagari writes vowels with combining marks (U+093E in "यशा"); they belong to the book name.

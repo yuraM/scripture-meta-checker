@@ -9,29 +9,41 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Unit 1. Project settings and lists", ("lists", "approvals", "term-lists")),
+    ("Unit 1. Project settings and lists", ("lists", "approvals", "term-lists", "term-renderings")),
     ("Unit 2. File structure", ("usfm", "book-titles", "normalization", "special-spaces")),
     ("Unit 3. Characters and punctuation",
-     ("characters", "scripts", "punctuation", "spacing", "numbers", "quotes", "pairs", "paragraph-final")),
+     ("characters", "scripts", "apostrophes", "punctuation", "paragraph-final", "quotes", "pairs",
+      "spacing", "numbers", "digit-systems", "fractions")),
     ("Unit 4. Words",
-     ("spelling", "mixed-capitalization", "capitalization", "repeated-words", "ordinals", "hyphenation")),
+     ("spelling", "hyphenation", "mixed-capitalization", "capitalization", "repeated-words", "ordinals")),
     ("Unit 5. References and terms",
-     ("references", "footnotes", "terms", "parallel-changes", "parallel-differences")),
+     ("references", "self-references", "one-chapter-books", "footnotes", "terms",
+      "parallel-changes", "parallel-differences")),
     ("Unit 6. Review lists", ("variants", "name-case", "styled-words", "divine-name",
                              "poetry-numbers", "poetry-line-ends", "poetry-two-sentences", "poetry-long-lines",
                              "poetry-verse-inside", "poetry-chapter-break", "unused")),
 )
 # Groups inside a unit (unit number, title, checks in the order to fix their problems): the window shows them
-# folded, the reports under their own heading. Their checks are also in STAGES.
+# folded, the reports under their own heading. Their checks are also in STAGES, next to each other.
 GROUPS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
+    (1, "Wordlist and inventories", ("lists", "approvals")),
+    (1, "Biblical terms lists", ("term-lists", "term-renderings")),
+    (2, "Markers and titles", ("usfm", "book-titles")),
+    (2, "Invisible characters", ("normalization", "special-spaces")),
+    (3, "Characters", ("characters", "scripts", "apostrophes")),
+    (3, "Punctuation", ("punctuation", "paragraph-final")),
     (3, "Quotes and brackets", ("quotes", "pairs")),
+    (3, "Numbers and spaces", ("spacing", "numbers", "digit-systems", "fractions")),
+    (4, "Spelling and word breaks", ("spelling", "hyphenation")),
     (4, "Capital letters", ("mixed-capitalization", "capitalization")),
+    (5, "References", ("references", "self-references", "one-chapter-books")),
     (5, "Parallel passages", ("parallel-changes", "parallel-differences")),
     (6, "Names", ("variants", "name-case")),
     (6, "Divine name and styles", ("styled-words", "divine-name")),
     (6, "Poetry", ("poetry-numbers", "poetry-line-ends", "poetry-two-sentences", "poetry-long-lines",
                    "poetry-verse-inside", "poetry-chapter-break")),
 )
+
 # Stages whose errors are named at the top of the report: fix them before the others.
 FIRST_STAGES = 2
 

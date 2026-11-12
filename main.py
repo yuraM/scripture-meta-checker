@@ -27,6 +27,9 @@ CHECKS = [
     "spacing",               # double spaces, thousands separator in numbers
     "numbers",               # 4-digit numbers written in the rare way of the project (4000 among 4.000)
     "scripts",               # words mixing scripts (Latin "c" in a Cyrillic word)
+    "apostrophes",           # the rare apostrophe of the project between two letters (' among ʼ)
+    "digit-systems",         # digits of another system than most numbers (۲۷ among 27)
+    "fractions",             # 1/2 where the project writes 1⁄2
     "normalization",         # NormalizationForm (NFC)
     "paragraph-final",       # last punctuation of a paragraph; headings ending with "."
     "ordinals",              # NumberOrdinals: "5-го", "8th", "ke-430"
@@ -47,11 +50,14 @@ CHECKS = [
     "poetry-verse-inside",   # verse number inside a poetry line
     "poetry-chapter-break",  # poetry goes on into the next chapter without 
     "references",            # references: chapters/verses that do not exist, marks not from Settings.xml
+    "self-references",       # cross reference \x to the verse it stands in
+    "one-chapter-books",     # Jude 1:3 and Jude 3 in one project
     "footnotes",             # footnotes built differently from similar ones (Lit.: \fq vs \fqa, missing full stop)
     "parallel-changes",      # ParallelPassageStatus.xml: approved parallel verses that were changed later
     "parallel-differences",  # ParallelPassageStatus.xml: parallel verses that differ in a few words
     "terms",                 # Biblical Terms: rendering missing in a verse (clear cases only), unused renderings
     "term-lists",            # Biblical Terms: old 'OK without a rendering' marks, guessed renderings
+    "term-renderings",       # Biblical Terms: renderings of more than 5 words
     "unused",                # list entries that never occur in the text (large report)
 ]
 

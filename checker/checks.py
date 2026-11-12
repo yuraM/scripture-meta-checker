@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable, Iterator
 from functools import lru_cache
 
 from checker import places
+from checker.forms import check_apostrophes, check_digit_systems, check_fractions
 from checker.poetry import (
     check_poetry_chapter_break, check_poetry_line_ends, check_poetry_long_lines, check_poetry_numbers,
     check_poetry_two_sentences, check_poetry_verse_inside, is_poetry_line,
@@ -25,7 +26,7 @@ from checker.settings import ReferenceFormat
 from checker.spelling import STATE_RIGHT, STATE_WRONG
 from checker.books import book_from_file_name
 from checker.spaces import check_special_spaces
-from checker.terms import check_term_lists, check_terms
+from checker.terms import check_term_lists, check_term_renderings, check_terms
 from checker.structure import (
     PERIPHERAL_BOOKS, XtReference, check_book_titles, check_file, check_structure, index_book, verse_range,
 )
@@ -535,6 +536,7 @@ class UsageCounter:
         self.poetry_lines: list[Analysis] = []  # \q, \q1, \q2 … lines of the checked books (checker/poetry.py)
         # Paragraphs and headings of the checked books in file order, notes left out (poetry checks look at neighbours).
         self.flow: list[Segment] = []
+        self.segments: list[Segment] = []  # all segments of the checked books, notes too
         # (book, "chapter:verse") -> \nd count and words without \nd in the scripture text of the verse.
         self.nd_places: dict[tuple[str, str], VerseNd] = {}
 
@@ -639,6 +641,7 @@ class UsageCounter:
             self.poetry_lines.append(analysis)
         if not segment.in_note:
             self.flow.append(segment)
+        self.segments.append(segment)
         self.characters.update(cluster for _, cluster in graphemes(text))
         for index, run in enumerate(runs):
             if run.is_word:
@@ -968,6 +971,70 @@ def check_references(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding
                           issue.item, f"{issue.message} in \\{reference.marker} '{reference.text}'", reference.context)
 
 
+def _verse_of(ref: str) -> tuple[int, int] | None:
+    """"5:3" or "5:3-4" -> (5, 3); None for other places."""
+    match = re.match(r"(\d+):(\d+)", ref)
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
+def check_self_references(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
+    """A cross reference (\\x) that points to the verse it stands in. Footnotes may name their own verse
+    ("some manuscripts do not have verse 28"), so only \\x notes are checked."""
+    for reference in usage.references:
+        if reference.note not in ("x", "ex"):
+            continue
+        origin = _verse_of(reference.ref)
+        if not origin or origin[1] == 0:
+            continue
+        for target in _reference_targets(reference, usage, ctx):
+            if isinstance(target, str):
+                continue
+            book, chapter, first, last = target
+            if book == reference.book and chapter == origin[0] and first <= origin[1] <= last:
+                yield Finding(reference.book, reference.ref, WARNING, "self-references", reference.text,
+                              f"the cross reference '{reference.text}' points to the verse it stands in", reference.context)
+                break
+
+
+MIN_ONE_CHAPTER = 3  # references to one-chapter books needed to know the usual form
+
+
+def check_one_chapter_books(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
+    """References to books with one chapter written two ways: "Jude 1:3" and "Jude 3". The rare way is listed."""
+    one_chapter = {book for book, chapters in usage.verses.items()
+                   if set(chapters) == {1} and book not in PERIPHERAL_BOOKS}
+    names = sorted((name for name, book in usage.book_names.items() if book in one_chapter and any(
+        ch.isalpha() for ch in name)), key=len, reverse=True)
+    if not names:
+        return
+    mark = re.escape(ctx.settings.reference_format.chapter_verse or ":")
+    name_re = "|".join(r"\s+".join(re.escape(word) for word in name.split()) for name in names)
+    pattern = re.compile(rf"(?<!\w)({name_re})\.?[\s ~]*(\d+)(?:{mark}(\d+))?(?!\d)", re.IGNORECASE)
+    places = []
+    for reference in usage.references:
+        for match in pattern.finditer(reference.text.partition("|")[0]):
+            places.append((reference, match, match.group(3) is not None))
+    with_chapter = sum(1 for _, _, has in places if has)
+    without = len(places) - with_chapter
+    if len(places) < MIN_ONE_CHAPTER or min(with_chapter, without) == 0:
+        return
+    rare = with_chapter <= without
+    if min(with_chapter, without) * 2 > max(with_chapter, without):
+        return  # no clear usual way
+    usual = max(with_chapter, without)
+    for reference, match, has in places:
+        if has != rare:
+            continue
+        text = match.group()
+        number_at = match.start(2) - match.start()
+        better = (text[:number_at] + match.group(3) if has
+                  else f"{text[:number_at]}1{ctx.settings.reference_format.chapter_verse}{match.group(2)}")
+        how = "without the chapter" if has else "with the chapter"
+        yield Finding(reference.book, reference.ref, WARNING, "one-chapter-books", match.group(),
+                      f"'{match.group()}': {usual} of {len(places)} references to books with one chapter are written "
+                      f"{how}: write '{better}'", reference.context)
+
+
 def _compact(numbers: list[int]) -> str:
     return f"{numbers[0]}-{numbers[-1]}" if len(numbers) > 1 else str(numbers[0])
 
@@ -1067,7 +1134,13 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "parallel-differences": check_parallel_differences,
     "terms": check_terms,
     "term-lists": check_term_lists,
+    "term-renderings": check_term_renderings,
     "poetry-numbers": lambda usage, ctx: check_poetry_numbers(usage.poetry_lines, ctx),
+    "self-references": check_self_references,
+    "one-chapter-books": check_one_chapter_books,
+    "apostrophes": lambda usage, ctx: check_apostrophes(usage.segments, ctx),
+    "digit-systems": lambda usage, ctx: check_digit_systems(usage.segments, ctx),
+    "fractions": lambda usage, ctx: check_fractions(usage.segments, ctx),
     "poetry-line-ends": lambda usage, ctx: check_poetry_line_ends(usage.flow, usage.case_refs, ctx),
     "poetry-two-sentences": lambda usage, ctx: check_poetry_two_sentences(usage.poetry_lines, ctx),
     "poetry-long-lines": lambda usage, ctx: check_poetry_long_lines(usage.poetry_lines, ctx),
@@ -1075,4 +1148,4 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "poetry-chapter-break": lambda usage, ctx: check_poetry_chapter_break(usage.flow, ctx),
 }
 # Checks that need the Biblical Terms files (read only when one of them runs).
-TERM_CHECKS = frozenset({"terms", "term-lists"})
+TERM_CHECKS = frozenset({"terms", "term-lists", "term-renderings"})

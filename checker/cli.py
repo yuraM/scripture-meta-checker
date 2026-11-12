@@ -42,6 +42,18 @@ TEXT_CHECKS = [*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS]
 
 # Shown at the top of each report. Keep the English simple: many readers know little English.
 CHECK_DESCRIPTIONS = {
+    "apostrophes": "A sign between two letters (' ’ ʼ ʻ) that is not the one this project nearly always uses there "
+                   "(for example ng'ombe among words with ʼ). Extra material (XXA…) is not checked: it is often in "
+                   "another language.",
+    "digit-systems": "Digits of another system than most numbers of the project (۲۷ among 27, or 1 among ၁). Numbers "
+                     "inside text of another language (Copyright 1985) are not shown.",
+    "fractions": "A fraction written with a slash (1/2) when most fractions of the project use the fraction slash "
+                 "⁄ (U+2044): 1⁄2.",
+    "self-references": "A cross reference \\x that points to the verse it stands in.",
+    "one-chapter-books": "References to books with one chapter (Obadiah, Philemon, 2 and 3 John, Jude) written two "
+                         "ways: with the chapter (Jude 1:3) and without it (Jude 3). The rare way is shown.",
+    "term-renderings": "A rendering in Paratext Biblical Terms with more than 5 words. A rendering is a word or a "
+                       "short phrase; if a clause translates the term, mark the verse OK without a rendering.",
     "poetry-numbers": "A number written with digits (12, or the digits of another script) in a poetry line "
                       "\\q, \\q1, \\q2. Poetry usually writes numbers in words. References (40:8) are not counted.",
     "poetry-line-ends": "A poetry line ends with a comma or semicolon, and the next line starts with a capital letter of a word that is written small everywhere else: a full stop is missing, or the capital is wrong.",

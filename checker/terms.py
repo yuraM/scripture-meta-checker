@@ -324,3 +324,31 @@ def check_term_lists(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding
                 yield Finding(book, f"{chapter}:{number}", WARNING, "term-lists", term_id,
                               f"the term '{term_id}' is marked OK without a rendering in this verse, but its "
                               f"rendering is here now; remove the mark", _context(usage.verse_texts[verse]))
+
+
+MAX_RENDERING_WORDS = 5  # a longer rendering is a clause or a sentence, not a rendering of a term
+
+
+def rendering_words(item: str) -> int:
+    """Words of a rendering: comments "(…)" and "**" (any words) not counted."""
+    text = re.sub(r"\([^)]*\)", " ", item).replace("**", " ")
+    return sum(1 for word in text.split() if re.search(r"\w", word))
+
+
+def check_term_renderings(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
+    """Renderings of more than 5 words: a clause, not a rendering. When a clause translates the term, the verse is
+    marked OK without a rendering instead (the guide for technical managers)."""
+    if _skipped(ctx, "term-renderings"):
+        return
+    data: TermData = ctx.terms
+    ids = {term.id for term in data.terms}
+    for term_id, rendering in data.renderings.items():
+        if term_id not in ids:
+            continue
+        for item in rendering.renderings:
+            words = rendering_words(item)
+            if words > MAX_RENDERING_WORDS:
+                yield Finding(PLACE, "(renderings)", WARNING, "term-renderings", item,
+                              f"the rendering '{item}' of the term '{term_id}' has {words} words: a rendering is a word "
+                              f"or a short phrase. If a clause translates the term, mark the verse OK without a "
+                              f"rendering", "")
