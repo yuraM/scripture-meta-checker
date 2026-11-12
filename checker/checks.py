@@ -323,6 +323,46 @@ def four_digit_form(number: str, separator: str) -> bool | None:
     return None
 
 
+def _groups_ok(groups: list[str], hindi_urdu: bool) -> bool:
+    """Digit groups of a number with thousands separators: "144,000" or, with HindiUrduNumberGrouping, "1,44,000"."""
+    if hindi_urdu:
+        return (len(groups[-1]) == 3 and 1 <= len(groups[0]) <= 2
+                and all(len(group) == 2 for group in groups[1:-1]))
+    return len(groups[0]) <= 3 and all(len(group) == 3 for group in groups[1:])
+
+
+def _is_range_or_list_mark(ch: str, ctx: CheckContext) -> bool:
+    """A mark between two numbers of a reference or a list: a dash (Unicode Pd, "103–105"), the chapter-verse
+    mark, a mark of NumberMedialPunctuation, or the thousands separator itself ("605, 597")."""
+    settings = ctx.settings
+    return (unicodedata.category(ch) == "Pd" or ch in settings.chapter_verse_separator
+            or ch in settings.number_medial_punctuation or ch == settings.number_thousands_separator)
+
+
+def _split_number(text: str, match: re.Match, in_note: bool, ctx: CheckContext) -> str:
+    """"1, 44,000", "45, 000": one number with a space after the thousands separator; returns that text or "".
+    Lists and references are not split numbers: "605, 597, 586", "119:9–21, 103–105", "aya 65, 169" (a note).
+    A second part of 3 digits only ("45, 400") counts as "000", or after 1-2 digits outside notes
+    ("458, 445" = years)."""
+    separator = ctx.settings.number_thousands_separator
+    if separator.isspace():
+        return ""
+    sep = re.escape(separator)
+    split = re.compile(rf"{sep}[^\S\n]+(\d+(?:{sep}\d+)*)(?!\d)").match(text, match.end())
+    if not split:
+        return ""
+    first, second, start = match.group(), split.group(1), match.start()
+    if not _groups_ok((first + separator + second).split(separator), ctx.settings.hindi_urdu_grouping):
+        return ""
+    if separator not in second and second != "000" and (len(first) > 2 or in_note):
+        return ""
+    before = re.search(r"\d[^\S\n]*(\S)[^\S\n]*$", text[max(0, start - 10):start])
+    after = re.match(r"[^\S\n]*(\S)[^\S\n]*\d", text[split.end():])
+    if any(mark and _is_range_or_list_mark(mark.group(1), ctx) for mark in (before, after)):
+        return ""
+    return text[start:split.end()]
+
+
 def check_spacing(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:
     """Double spaces and thousands separators in numbers (NumberThousandsSeparator)."""
     text = analysis.segment.text
@@ -334,15 +374,22 @@ def check_spacing(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:
     if not separator:
         return
     shown = _separator_text(separator)
+    hindi_urdu = ctx.settings.hindi_urdu_grouping
     for match in _numbers(text, ctx):
         number, start = match.group(), match.start()
         groups = number.split(separator)
         if len(groups) == 1 and len(number) >= MIN_SEPARATED_DIGITS:
             yield analysis.finding(start, len(number), WARNING, "spacing", "no thousands separator",
                                    f"number '{number}' needs a thousands separator {shown}")
-        elif len(groups) > 1 and (len(groups[0]) > 3 or any(len(group) != 3 for group in groups[1:])):
+        elif len(groups) > 1 and not _groups_ok(groups, hindi_urdu):
+            rule = ("the digit groups must have 2 digits, and the last group 3 digits" if hindi_urdu
+                    else "after the thousands separator there must be 3 digits")
             yield analysis.finding(start, len(number), WARNING, "spacing", "digit groups",
-                                   f"number '{number}': after the thousands separator there must be 3 digits")
+                                   f"number '{number}': {rule}")
+        split = _split_number(text, match, analysis.segment.in_note, ctx)
+        if split:
+            yield analysis.finding(start, len(split), WARNING, "spacing", "space in number",
+                                   f"number '{split}' has a space after the thousands separator {shown}")
         # "10 000" with an ordinary space instead of the separator.
         following = re.match(r"(\s)(\d{3})(?!\d)", text[match.end():])
         if following and following.group(1) != separator and len(groups[-1]) <= 3:

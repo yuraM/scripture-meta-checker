@@ -2,7 +2,7 @@
 
 Changes of the Scripture checker by release. Releases: https://github.com/yuraM/scripture-meta-checker/releases
 
-## Unreleased
+## 1.1 (2026-11-12)
 
 ### What's new
 
@@ -17,9 +17,14 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
   all other books have `\h 1 Kings`. `\h`, `\toc1`, `\toc2` and `\toc3` are compared each on their own, because many
   projects write the short `\toc3` without a space (`1Ki`).
 - The groups of checks in the window and the reports are now called **Unit 1 … Unit 6** (before: Stage).
+- **spacing**: a number with a space after the thousands separator is shown, for example `1, 44,000`, `45, 000`
+  or `53, 400`. Lists of numbers (`605, 597, 586`) and verse lists (`119:9–21, 103–105`) are not shown.
 
 ### Fixed
 
+- **spacing:** projects with Hindi/Urdu number grouping (Project settings > Number settings) write `1,44,000`
+  (groups of 2 digits, the last group 3 digits). Such numbers were shown as wrong; now they are right, and a
+  number written `144,000` in these projects is shown.
 - **Daughter projects** (made from another project in Paratext) have no versification of their own: the checker now
   takes the versification of the parent project, as Paratext does. Before it used English, so report links and verse
   numbers of Biblical Terms could be one verse off in such projects (for example in Psalms).

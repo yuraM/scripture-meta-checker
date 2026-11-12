@@ -206,6 +206,20 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertEqual([f.item for f in findings],
                          ["double space", "no thousands separator", "wrong thousands separator", "digit groups"])
 
+    def test_spacing_split_number_and_hindi_urdu_grouping(self):
+        settings = replace(self.settings, number_thousands_separator=",")
+        ctx = CheckContext(settings, self.spelling)
+        text = "\\p 1, 440,000 і 1, 2 і 5,000, 6,000 і 1,44,000 і 45, 000 і 53, 400 і 458, 445 і 41, 153, 176 і 119:9–21, 103"
+        findings = list(CHECKS["spacing"](ctx.analyse(parse_usfm(text, "TST")[0]), ctx))
+        self.assertEqual([(f.item, f.message.split("'")[1]) for f in findings],
+                         [("space in number", "1, 440,000"), ("digit groups", "1,44,000"),
+                          ("space in number", "45, 000"), ("space in number", "53, 400")])
+        ctx = CheckContext(replace(settings, hindi_urdu_grouping=True), self.spelling)
+        text = "\\p 1, 44,000 і 1,44,000 і 144,000 і 12,34,56,789"
+        findings = list(CHECKS["spacing"](ctx.analyse(parse_usfm(text, "TST")[0]), ctx))
+        self.assertEqual([(f.item, f.message.split("'")[1]) for f in findings],
+                         [("space in number", "1, 44,000"), ("digit groups", "144,000")])
+
     def test_scripts(self):
         findings = self.run_check("scripts", "\\p cлово слово Word VІ")
         self.assertEqual([(f.severity, f.item) for f in findings], [(ERROR, "cлово"), (ERROR, "VІ")])

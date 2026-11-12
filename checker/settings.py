@@ -82,6 +82,8 @@ class ProjectSettings:
     markers_requiring_sentence_final: frozenset[str] = frozenset()
     normalization_form: str = ""  # "NFC", "NFD" or "" (not set)
     number_thousands_separator: str = ""
+    # HindiUrduNumberGrouping: groups of 2 digits before the last 3 (1,44,000 = 144 000).
+    hindi_urdu_grouping: bool = False
     chapter_verse_separator: str = ":"
     reference_format: ReferenceFormat = ReferenceFormat()
     # NumberOrdinals ("-й -го", "st nd rd th", "ke-") and NumberOrdinalType ("suffix" / "prefix").
@@ -206,6 +208,7 @@ def load_settings(path: Path) -> ProjectSettings:
         normalization_form=(root.findtext("NormalizationForm") or "").strip().upper(),
         # Kept unstripped: the separator may be a space character (U+202F).
         number_thousands_separator=root.findtext("NumberThousandsSeparator") or "",
+        hindi_urdu_grouping=(root.findtext("HindiUrduNumberGrouping") or "").strip().upper() == "T",
         chapter_verse_separator=chapter_verse_separator,
         reference_format=ReferenceFormat(
             chapter_verse=chapter_verse_separator,
