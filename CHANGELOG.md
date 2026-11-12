@@ -6,9 +6,10 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
-- **Groups inside a unit:** a unit box in the window can have a folded group of checks (for example **▸ Poetry** in
-  Unit 6). Click it to see its checks; they are numbered in the order to fix the problems. The report shows the group
-  with its own heading.
+- **Folded lists of checks:** in the window every unit is a folded list. Click its name to see its checks; the box on
+  the right selects all of them (a dash = only some are selected). A unit can have a group inside it (for example
+  **Poetry** in Unit 6), folded the same way, with its checks numbered in the order to fix the problems. The report
+  shows the group with its own heading.
 - **poetry-numbers** (Unit 6, Poetry 1): a number written with digits in a poetry line `\q1`, `\q2`, for example
   `40,000` in a song. Poetry usually writes numbers in words. References (`40:8`) are not shown.
 - **poetry-two-sentences** (Unit 6, Poetry 2): a long poetry line with a full stop, `!` or `?` inside it, for example
