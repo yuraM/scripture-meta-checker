@@ -294,11 +294,9 @@ def check_all_caps(segments: list[Segment], ctx: CheckContext) -> Iterator[Findi
     for segment, match in capitals:
         word = match.group()
         other = forms.get(word.lower())
-        if other:
-            usual = other.most_common(1)[0][0]
-            advice = (f"elsewhere it is written '{usual}' ({sum(other.values())}×): write '{usual}', and for capitals "
-                      f"use a marker (\\nd {usual}\\nd* for the divine name, \\sc … \\sc*)")
-        else:
-            advice = "type it in small letters and use a marker for capitals (\\sc … \\sc*, \\nd … \\nd* for the divine name)"
+        # The form used elsewhere is only a hint: the same letters may be another word ("МЕНЕ" / "мене").
+        elsewhere = (f" Elsewhere the project writes '{other.most_common(1)[0][0]}' ({sum(other.values())}×)."
+                     if other else "")
         yield _finding(segment, match.start(), len(word), "all-caps", word,
-                       f"'{word}' is typed in capitals in \\{segment.style}: {advice}")
+                       f"'{word}' is typed in capitals in \\{segment.style}: type it in small letters and use a marker "
+                       f"for capitals (\\sc … \\sc*; \\nd … \\nd* for the divine name).{elsewhere}")

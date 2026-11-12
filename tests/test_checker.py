@@ -363,9 +363,9 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         # Capitals come only from markers: inscriptions (\pc) and headings typed in capitals count too;
         # \nd and Roman numerals do not.
         self.assertEqual([f.item for f in found], ["ГОСПОДЬ", "МЕНЕ", "МЕНЕ", "ТЕКЕЛ", "ГОСПОДЬ", "ЦАР"])
-        self.assertIn("\\nd Господь\\nd*", found[0].message)
-        self.assertIn("write 'мене'", found[1].message)
+        self.assertIn("Elsewhere the project writes 'Господь'", found[0].message)
         self.assertIn("use a marker for capitals", found[3].message)
+        self.assertNotIn("Elsewhere", found[3].message)  # ТЕКЕЛ is written nowhere else
 
     def test_heading_case(self):
         from checker import forms
