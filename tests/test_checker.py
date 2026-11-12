@@ -355,7 +355,7 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
 
     def test_all_caps(self):
         from checker import forms
-        usfm = ("\\id TST\n\\c 1\n\\p \\v 1 " + " ".join("Господь сказав." for _ in range(5)) +
+        usfm = ("\\id TST\n\\c 1\n\\p \\v 1 " + " ".join("Господь сказав." for _ in range(12)) +
                 " \\v 2 І сказав ГОСПОДЬ слово. \\nd ГОСПОДЬ\\nd* тут. Розділ II і IV.\n"
                 "\\pc МЕНЕ, МЕНЕ, ТЕКЕЛ\n\\s1 ГОСПОДЬ ЦАР\n\\p \\v 3 мене, мене, мене.")
         usage = self._poetry_usage(usfm)
