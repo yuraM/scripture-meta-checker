@@ -44,7 +44,7 @@ CHECKS = [
     "styled-words",          # word usually in \nd but not here (or the reverse)
     "divine-name",           # the divine name without \nd where translations have LORD in \nd
     "poetry-numbers",        # digits in poetry lines \q1 \q2 (poetry usually writes numbers in words)
-    "poetry-line-ends",      # poetry line ends with "," but the next starts with a capital (full stop missing?)
+    "line-ends",             # poetry/list line ends with "," but the next starts with a capital (full stop?)
     "poetry-two-sentences",  # long poetry line with a sentence end inside: maybe two lines
     "poetry-long-lines",     # very long poetry line
     "poetry-verse-inside",   # verse number inside a poetry line
@@ -53,6 +53,7 @@ CHECKS = [
     "self-references",       # cross reference \x to the verse it stands in
     "one-chapter-books",     # Jude 1:3 and Jude 3 in one project
     "footnotes",             # footnotes built differently from similar ones (Lit.: \fq vs \fqa, missing full stop)
+    "footnote-quotes",       # \fq quote of a footnote not found in the verse
     "parallel-changes",      # ParallelPassageStatus.xml: approved parallel verses that were changed later
     "parallel-differences",  # ParallelPassageStatus.xml: parallel verses that differ in a few words
     "terms",                 # Biblical Terms: rendering missing in a verse (clear cases only), unused renderings

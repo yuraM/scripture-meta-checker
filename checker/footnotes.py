@@ -16,6 +16,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from checker.model import ERROR, WARNING, Finding
+from checker.tokens import LETTER
 from checker.usfm import remove_attributes
 
 CHECK = "footnotes"
@@ -270,3 +271,56 @@ def _in_verse(note: Note, verse_texts: dict[tuple[str, int, int], str]) -> bool:
     verse_text = verse_texts.get((note.book, int(chapter), int(verse_number.group())), "")
     verse_words = [w.casefold() for w in _WORD_RE.findall(verse_text)]
     return any(verse_words[i:i + len(words)] == words for i in range(len(verse_words) - len(words) + 1))
+
+
+QUOTE_WORD_RE = re.compile(rf"{LETTER}+(?:['’ʼ\-]{LETTER}+)*")
+MIN_STEM = 3  # letters of a word that must agree when its ending differs (inflection)
+ENDING = 3  # letters at the end of a word that may differ
+
+
+def _words(text: str) -> list[str]:
+    return [word.casefold() for word in QUOTE_WORD_RE.findall(text)]
+
+
+def _word_in_verse(word: str, verse_words: set[str]) -> bool:
+    """The word is in the verse, maybe with another ending (Ukrainian "коника" for "коник") or with a prefix joined
+    to it (Ethiopic prepositions are written together with the next word)."""
+    if word in verse_words:
+        return True
+    if len(word) < MIN_STEM:
+        return False
+    stem = word[:max(MIN_STEM, len(word) - ENDING)]
+    return any(other.startswith(stem) or word in other for other in verse_words)
+
+
+def check_footnote_quotes(notes: list[Note], verse_texts: dict[tuple[str, int, int], str]) -> list[Finding]:
+    """A footnote quotes the verse (\\fq), but a word of the quote is not in the verse (nor in the verses next to it,
+    nor in the verses of its \\fr range): the quote or the verse was changed later. Words with another ending count
+    as found, so inflected languages give few false problems; a person decides (the guide: native speaker review)."""
+    findings: list[Finding] = []
+    for note in notes:
+        match = re.match(r"(\d+):(\d+)", note.ref)
+        if not match:
+            continue
+        chapter, verse = int(match.group(1)), int(match.group(2))
+        # "\fr 19:10–14" in verse 14: the note is about verses 10-14.
+        first = last = verse
+        for marker, text in note.parts:
+            if marker == "fr" and (span := re.match(r"\s*\d+\D(\d+)(?:\s*\W\s*(\d+))?", text)):
+                first = min(first, int(span.group(1)))
+                last = max(last, int(span.group(2) or span.group(1)))
+        text = " ".join(verse_texts.get((note.book, chapter, number), "") for number in range(first - 1, last + 2))
+        verse_words = set(_words(text))
+        if not verse_words:
+            continue
+        for marker, quote in note.parts:
+            if marker != "fq":
+                continue
+            missing = [word for word in _words(quote) if not _word_in_verse(word, verse_words)]
+            if missing:
+                shown = " ".join(quote.split())
+                findings.append(Finding(
+                    note.book, note.ref, WARNING, "footnote-quotes", missing[0],
+                    f"the footnote quotes '{shown}' (\\fq), but '{', '.join(missing[:3])}' is not in the verse: "
+                    "was the quote or the verse changed?", note.raw))
+    return findings

@@ -14,12 +14,17 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
   (`ng'ombe` where the project writes `ʼ`).
 - **digit-systems** (Unit 3): digits of another system than most numbers of the project (`۲۷` among `27`).
 - **fractions** (Unit 3): `1/2` where the project writes most fractions with the fraction slash: `1⁄2`.
+- **footnote-quotes** (Unit 5, Footnotes): a footnote quotes the verse (`\fq`), but a word of the quote is not
+  in the verse. Words with another ending count as found.
+- **references** now also checks the references in `\r` (parallel passages under a heading), `\sr`, `\mr`,
+  `\ior` (outline of a book introduction) and `\rq`.
 - **self-references** (Unit 5): a cross reference `\x` that points to the verse it stands in.
 - **one-chapter-books** (Unit 5): references to books with one chapter written two ways (`Jude 1:3` and `Jude 3`).
 - **term-renderings** (Unit 1): a rendering in Biblical Terms with more than 5 words.
 - **poetry-numbers** (Unit 6, Poetry 1): a number written with digits in a poetry line `\q1`, `\q2`, for example
   `40,000` in a song. Poetry usually writes numbers in words. References (`40:8`) are not shown.
-- **poetry-line-ends** (Unit 6, Poetry 2): a poetry line ends with a comma, and the next line starts with a
+- **line-ends** (Unit 6, Poetry and lists 2): a poetry line or a list item (`\li`) ends with a comma, and the next
+  line starts with a
   capital letter of a word that is written small everywhere else. Maybe a full stop is missing.
 - **poetry-two-sentences** (Unit 6, Poetry 3): a long poetry line with a full stop, `!` or `?` inside it, for example
   "…from the ground. You will eat plants…". Maybe the line should be two lines. "Long" is decided by the project:

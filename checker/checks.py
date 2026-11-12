@@ -10,12 +10,12 @@ from functools import lru_cache
 from checker import places
 from checker.forms import check_apostrophes, check_digit_systems, check_fractions
 from checker.poetry import (
-    check_poetry_chapter_break, check_poetry_line_ends, check_poetry_long_lines, check_poetry_numbers,
+    check_poetry_chapter_break, check_line_ends, check_poetry_long_lines, check_poetry_numbers,
     check_poetry_two_sentences, check_poetry_verse_inside, is_poetry_line,
 )
 from checker.approvals import check_approvals
 from checker.divine_name import VerseNd, check_divine_name
-from checker.footnotes import Note, check_footnotes, read_notes
+from checker.footnotes import Note, check_footnote_quotes, check_footnotes, read_notes
 from checker.hyphenation import inconsistent_affixes, is_unhyphenated, rule_violations, word_scripts
 from checker.model import ERROR, WARNING, Analysis, CheckContext, Finding  # noqa: F401 (re-exported)
 from checker.pairs import check_pairs
@@ -946,7 +946,7 @@ def check_references(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding
     for reference in usage.references:
         def finding(severity: str, item: str, message: str) -> Finding:
             return Finding(reference.book, reference.ref, severity, "references", item,
-                           f"{message} in \\xt '{reference.text}'", reference.context)
+                           f"{message} in \\{reference.marker} '{reference.text}'", reference.context)
         for issue in parse_reference(reference.text.partition("|")[0], fmt)[1]:
             yield finding(WARNING if issue.is_question else ERROR, issue.item, issue.message)
         for item, message in _link_problems(reference):
@@ -1129,6 +1129,7 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "divine-name": check_divine_name_verses,
     "numbers": check_numbers,
     "footnotes": check_footnote_forms,
+    "footnote-quotes": lambda usage, ctx: check_footnote_quotes(usage.footnotes, usage.verse_texts),
     "references": check_references,
     "parallel-changes": check_parallel_changes,
     "parallel-differences": check_parallel_differences,
@@ -1141,7 +1142,7 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "apostrophes": lambda usage, ctx: check_apostrophes(usage.segments, ctx),
     "digit-systems": lambda usage, ctx: check_digit_systems(usage.segments, ctx),
     "fractions": lambda usage, ctx: check_fractions(usage.segments, ctx),
-    "poetry-line-ends": lambda usage, ctx: check_poetry_line_ends(usage.flow, usage.case_refs, ctx),
+    "line-ends": lambda usage, ctx: check_line_ends(usage.flow, usage.case_refs, ctx),
     "poetry-two-sentences": lambda usage, ctx: check_poetry_two_sentences(usage.poetry_lines, ctx),
     "poetry-long-lines": lambda usage, ctx: check_poetry_long_lines(usage.poetry_lines, ctx),
     "poetry-verse-inside": lambda usage, ctx: check_poetry_verse_inside(usage.poetry_lines, ctx),

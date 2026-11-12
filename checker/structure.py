@@ -30,6 +30,10 @@ INLINE_MARKERS = frozenset({"v", "rem"}) | {"fr", "xo", "fv", "cp", "restore", "
 # Note markers whose text is the reference of the note ("\fr 2:19 ").
 NOTE_REFERENCE_MARKERS = frozenset({"fr", "xo"})
 BOOK_NAME_MARKERS = frozenset({"toc1", "toc2", "toc3"})
+# Markers whose text is a reference: parallel passages under a heading (\r), section and major section references
+# (\sr, \mr), outline references in introductions (\ior … \ior*), the reference of a quotation (\rq … \rq*).
+REFERENCE_PARAGRAPHS = frozenset({"r", "sr", "mr"})
+REFERENCE_SPANS = frozenset({"ior", "rq"})
 # USFM peripheral books: no chapter/verse numbering to check.
 PERIPHERAL_BOOKS = frozenset({"FRT", "BAK", "OTH", "INT", "CNC", "GLO", "TDX", "NDX",
                               "XXA", "XXB", "XXC", "XXD", "XXE", "XXF", "XXG"})
@@ -129,6 +133,8 @@ class _StructureScanner:
                 elif name == "xt" or (self.note and name in NOTE_REFERENCE_MARKERS):
                     yield from self._note_text(name, match.start(), text)
                     continue
+                elif name in REFERENCE_SPANS:
+                    self._reference_text(name, match.start(), text)
             elif name == "c":
                 yield from self._end_verse()
                 yield from self._end_paragraph(match.start())
@@ -148,6 +154,8 @@ class _StructureScanner:
             elif name not in INLINE_MARKERS:
                 yield from self._end_paragraph(match.start())
                 self.paragraph = name
+                if name in REFERENCE_PARAGRAPHS:
+                    self._reference_text(name, match.start(), text)
                 if name == "rem":
                     continue
             if text.strip() and not self.note and not self.skip and not _is_heading(self.paragraph):
@@ -208,6 +216,12 @@ class _StructureScanner:
         if self.verse_start is not None:
             yield self.finding(self.verse_start, WARNING, "empty verse", f"verse {self.verse} has no text")
         self.verse_start = None
+
+    def _reference_text(self, name: str, offset: int, text: str) -> None:
+        """The text of \\r, \\sr, \\mr, \\ior, \\rq is a reference, usually in brackets: "(Мт 5:3–12; Лк 6:20–23)"."""
+        shown = text.strip().strip("()[]").strip().rstrip(".")
+        if shown:
+            self.index.references.append(XtReference(self.book, self.ref, shown, self.context(offset), marker=name))
 
     def _note_text(self, name: str, offset: int, text: str) -> Iterator[Finding]:
         """\\fr / \\xo must name the verse the note is in; \\xt references are collected."""

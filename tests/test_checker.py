@@ -226,7 +226,7 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
                 "\\c 2\n\\q1 \\v 1 Друга глава без розриву.\n"           # no \b at the end of chapter 1
                 "\\b\n\\c 3\n\\q1 \\v 1 Третя глава після розриву.\n")
         usage = self._poetry_usage(usfm)
-        ends = list(poetry.check_poetry_line_ends(usage.flow, usage.case_refs, self.ctx))
+        ends = list(poetry.check_line_ends(usage.flow, usage.case_refs, self.ctx))
         self.assertEqual([(f.ref, f.item) for f in ends], [("1:2", "Слово")])
         inside = list(poetry.check_poetry_verse_inside(usage.poetry_lines, self.ctx))
         self.assertEqual([(f.ref, f.item) for f in inside], [("1:3", "1:3")])
@@ -234,14 +234,22 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertEqual([(f.ref, f.item) for f in breaks], [("2:1", "1-2")])
         self.assertIn("\\b (stanza break)", breaks[0].message)
 
+    def test_line_ends_in_lists(self):
+        from checker import poetry
+        usfm = ("\\id TST\n\\c 1\n\\p \\v 1 Тут слово, слово, слово.\n"
+                "\\li1 \\v 2 Перший пункт,\n\\li1 Слово другого пункту.\n")
+        usage = self._poetry_usage(usfm)
+        found = list(poetry.check_line_ends(usage.flow, usage.case_refs, self.ctx))
+        self.assertEqual([(f.check, f.item) for f in found], [("line-ends", "Слово")])
+
     def test_poetry_line_ends_project_capitals(self):
         from checker import poetry
         # Every line after a comma starts with a capital: the project does it on purpose, only a note.
         usfm = "\\id TST\n\\c 1\n\\p \\v 1 Тут слово, слово, слово.\n" + "".join(
             f"\\q1 \\v {n} Рядок,\n\\q2 Слово далі.\n" for n in range(2, 25))
         usage = self._poetry_usage(usfm)
-        self.assertEqual(list(poetry.check_poetry_line_ends(usage.flow, usage.case_refs, self.ctx)), [])
-        self.assertIn("on purpose", self.ctx.notes["poetry-line-ends"])
+        self.assertEqual(list(poetry.check_line_ends(usage.flow, usage.case_refs, self.ctx)), [])
+        self.assertIn("on purpose", self.ctx.notes["line-ends"])
 
     def test_poetry_long_lines(self):
         from checker import poetry
@@ -595,6 +603,15 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         findings = list(check_references(usage, self.ctx))
         self.assertEqual([(f.severity, f.item) for f in findings],
                          [(ERROR, "GEN 2:5"), (ERROR, "EXO 3:1"), (WARNING, "Лев."), (ERROR, "GEN 1:3")])
+
+    def test_references_in_headings_and_outlines(self):
+        usage = UsageCounter()
+        usage.add_source("GEN", "\\id GEN\n\\toc3 Бут.\n\\c 1\n\\p \\v 1 а \\v 2 б", self.ctx)
+        usage.add_source("EXO", "\\id EXO\n\\toc3 Вих.\n\\ip Огляд \\ior 1:1–1:2\\ior*\n\\c 1\n\\s1 Заголовок\n"
+                                "\\r (Бут. 1:2; Бут. 1:7)\n\\p \\v 1 а \\v 2 б", self.ctx)
+        findings = list(check_references(usage, self.ctx))
+        self.assertEqual([(f.item, f.message.split(" in ")[-1]) for f in findings],
+                         [("GEN 1:7", "\\r 'Бут. 1:2; Бут. 1:7'")])
 
     def test_self_references(self):
         from checker.checks import check_self_references
@@ -1083,6 +1100,17 @@ class ReportTest(unittest.TestCase):
 
 class FootnotesTest(unittest.TestCase):
     FINAL = frozenset(".!?")
+
+    def test_footnote_quotes(self):
+        from checker.footnotes import check_footnote_quotes, read_notes
+        usfm = ("\\id TST\n\\c 1\n"
+                "\\v 1 а\\f + \\fr 1:1 \\fq Зацвіте мигдаль \\ft – старість.\\f*\n"   # other ending: found
+                "\\v 2 б\\f + \\fr 1:2 \\fq стане коник \\ft …\\f*\n"                 # "коник" is not in the verse
+                "\\v 4 в\\f + \\fr 1:2–4 \\fq мати \\ft тут.\\f*\n")                  # verse 2 of the \fr range
+        verses = {("TST", 1, 1): "Зацвітуть мигдалі.", ("TST", 1, 2): "Мати стане сараною.", ("TST", 1, 4): "Кінець."}
+        found = check_footnote_quotes(read_notes("TST", usfm), verses)
+        self.assertEqual([(f.ref, f.item) for f in found], [("1:2", "коник")])
+        self.assertIn("(\\fq)", found[0].message)
 
     def run_notes(self, bodies, verse_texts=None):
         from checker.footnotes import check_footnotes, read_notes

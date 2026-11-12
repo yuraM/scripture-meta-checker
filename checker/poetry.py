@@ -116,13 +116,17 @@ def check_poetry_two_sentences(lines: list[Analysis], ctx: CheckContext) -> Iter
 
 # --- checks that look at neighbouring paragraphs (UsageCounter.flow: paragraphs and headings, no notes) ---
 
-LEAD_IN_STYLE_RE = re.compile(r"(p|m|pi\d*|pm\w*|mi|nb|pc)$")
+LIST_STYLE_RE = re.compile(r"(li\d*|lim\d*)$")  # list items: their lines end like poetry lines
 LINE_END_NAMES = ("COMMA", "SEMICOLON")
 
 
 def is_poetry_segment(segment: Segment) -> bool:
     return (not segment.in_note and bool(POETRY_STYLE_RE.match(segment.style))
             and segment.book not in PERIPHERAL_BOOKS)
+
+
+def is_list_segment(segment: Segment) -> bool:
+    return not segment.in_note and bool(LIST_STYLE_RE.match(segment.style)) and segment.book not in PERIPHERAL_BOOKS
 
 
 def _chapter(segment: Segment) -> str:
@@ -161,14 +165,17 @@ MAX_CAPITAL_SHARE = 0.1  # more capitals after a line-end comma: the project sta
 MIN_LINE_STARTS = 20  # the share is known only from this many line starts after a comma
 
 
-def check_poetry_line_ends(flow: list[Segment], case_refs: dict, ctx: CheckContext) -> Iterator[Finding]:
-    """A line ends with a comma or semicolon, the next line starts with a capital, and that word is written small
-    everywhere else in the middle of a sentence: a full stop is missing, or the capital is wrong. A project that
+def check_line_ends(flow: list[Segment], case_refs: dict, ctx: CheckContext) -> Iterator[Finding]:
+    """Poetry lines and list items (\\li): a line ends with a comma or semicolon, the next line starts with a
+    capital, and that word is written small everywhere else in the middle of a sentence: a full stop is missing, or
+    the capital is wrong. A project that
     starts many such lines with a capital (more than 10%) does it on purpose: nothing is listed, a note says so."""
     found: list[Finding] = []
     small = 0
     for first, second in _pairs(flow):
-        if not (is_poetry_segment(first) and is_poetry_segment(second)) or second.previous_style != first.style:
+        same_kind = ((is_poetry_segment(first) and is_poetry_segment(second))
+                     or (is_list_segment(first) and is_list_segment(second)))
+        if not same_kind or second.previous_style != first.style:
             continue
         mark, _ = _last_mark(first.text)
         if not mark or not _named(mark, LINE_END_NAMES):
@@ -183,13 +190,13 @@ def check_poetry_line_ends(flow: list[Segment], case_refs: dict, ctx: CheckConte
         if not word.group()[0].isupper():
             small += 1
             continue
-        found.append(_finding(second, start, len(word.group()), "poetry-line-ends", word.group(),
+        found.append(_finding(second, start, len(word.group()), "line-ends", word.group(),
                        f"the line before ends with '{mark}', but this line starts with '{word.group()}', which is "
                        f"written small everywhere else ({len(lowercase)}×): a full stop is missing, or write "
                        f"'{word.group().lower()}'"))
     total = len(found) + small
     if total >= MIN_LINE_STARTS and len(found) > total * MAX_CAPITAL_SHARE:
-        ctx.notes["poetry-line-ends"] = (
+        ctx.notes["line-ends"] = (
             f"Not listed: {len(found)} of {total} lines after a comma or semicolon start with a capital, "
             "so this project starts poetry lines with a capital on purpose.")
         return

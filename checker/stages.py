@@ -17,10 +17,10 @@ STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Unit 4. Words",
      ("spelling", "hyphenation", "mixed-capitalization", "capitalization", "repeated-words", "ordinals")),
     ("Unit 5. References and terms",
-     ("references", "self-references", "one-chapter-books", "footnotes", "terms",
+     ("references", "self-references", "one-chapter-books", "footnotes", "footnote-quotes", "terms",
       "parallel-changes", "parallel-differences")),
     ("Unit 6. Review lists", ("variants", "name-case", "styled-words", "divine-name",
-                             "poetry-numbers", "poetry-line-ends", "poetry-two-sentences", "poetry-long-lines",
+                             "poetry-numbers", "line-ends", "poetry-two-sentences", "poetry-long-lines",
                              "poetry-verse-inside", "poetry-chapter-break", "unused")),
 )
 # Groups inside a unit (unit number, title, checks in the order to fix their problems): the window shows them
@@ -37,10 +37,11 @@ GROUPS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
     (4, "Spelling and word breaks", ("spelling", "hyphenation")),
     (4, "Capital letters", ("mixed-capitalization", "capitalization")),
     (5, "References", ("references", "self-references", "one-chapter-books")),
+    (5, "Footnotes", ("footnotes", "footnote-quotes")),
     (5, "Parallel passages", ("parallel-changes", "parallel-differences")),
     (6, "Names", ("variants", "name-case")),
     (6, "Divine name and styles", ("styled-words", "divine-name")),
-    (6, "Poetry", ("poetry-numbers", "poetry-line-ends", "poetry-two-sentences", "poetry-long-lines",
+    (6, "Poetry and lists", ("poetry-numbers", "line-ends", "poetry-two-sentences", "poetry-long-lines",
                    "poetry-verse-inside", "poetry-chapter-break")),
 )
 
