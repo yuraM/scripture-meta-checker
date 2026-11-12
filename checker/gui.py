@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import queue
+import subprocess
 import sys
 import threading
 import traceback
@@ -21,7 +22,7 @@ from checker.cli import (
 from checker.html_report import TXT_FOLDER
 from checker.paratext_link import register as register_links
 from checker.stages import STAGES
-from checker.updates import newer_release
+from checker.updates import Release, UpdateError, newer_release, remove_old, update
 from checker.version import VERSION
 
 TITLE = "Scripture checker"
@@ -29,6 +30,7 @@ TITLE = "Scripture checker"
 PARATEXT_FOLDERS = ("C:/My Paratext 9 Projects", "C:/My Paratext 8 Projects", "D:/My Paratext 9 Projects")
 # Window and exe icon; build_exe.bat puts it next to this module inside the exe.
 ICON = Path(__file__).with_name("icon.ico")
+FROZEN = bool(getattr(sys, "frozen", False))  # running as checker.exe
 REPORTS_FOLDER = Path.home() / "Documents" / "Scripture checker reports"
 STAGE_COLUMNS = 6  # stage boxes per row: all in one row keeps the window low
 STAGE_WIDTH = 160  # pixels for the title of a stage box
@@ -164,9 +166,11 @@ class CheckerWindow:
         self.update_row = ttk.Frame(frame)
         self.update_text = StringVar()
         ttk.Label(self.update_row, textvariable=self.update_text, foreground="#0a64c8").grid(row=0, column=0)
-        self.update_page = ""
-        ttk.Button(self.update_row, text="Download",
-                   command=lambda: webbrowser.open(self.update_page)).grid(row=0, column=1, padx=(8, 0))
+        self.release: Release | None = None
+        # The exe updates itself; started from Python, the button opens the release page.
+        self.update_button = ttk.Button(self.update_row, text="Update" if FROZEN else "Download",
+                                        command=self._update)
+        self.update_button.grid(row=0, column=1, padx=(8, 0))
         root.after(100, self._poll)
 
     def check_for_update(self) -> None:
@@ -174,8 +178,33 @@ class CheckerWindow:
         def ask() -> None:
             found = newer_release(VERSION)
             if found:
-                self.events.put(("update", *found))
+                self.events.put(("update", found))
         threading.Thread(target=ask, daemon=True).start()
+
+    def _update(self) -> None:
+        """Update button: download the new exe in the background, swap the files, start the new version."""
+        release = self.release
+        if release is None:
+            return
+        if not FROZEN or not release.url:
+            webbrowser.open(release.page)
+            return
+        if self.running:
+            messagebox.showinfo(TITLE, "Wait until the checks end, then press Update again.")
+            return
+        self.running = True  # no Run while the file is downloaded
+        self._refresh_run()
+        self.update_button.configure(state="disabled")
+        self.status.set(f"Downloading version {release.tag.lstrip('vV')}...")
+        exe = Path(sys.executable)
+
+        def work() -> None:
+            try:
+                update(release, exe, lambda done, total: self.events.put(("update-progress", done, total)))
+                self.events.put(("update-done", exe))
+            except UpdateError as error:
+                self.events.put(("update-error", str(error)))
+        threading.Thread(target=work, daemon=True).start()
 
     def _set(self, names, value: bool) -> None:
         for name in names:
@@ -272,10 +301,30 @@ class CheckerWindow:
                     self._refresh_buttons()
                     self._open()
                 elif event[0] == "update":
-                    _, tag, page = event
-                    self.update_page = page
-                    self.update_text.set(f"A new version is ready: {tag.lstrip('vV')} (this is {VERSION}).")
+                    self.release = event[1]
+                    self.update_text.set(
+                        f"A new version is ready: {self.release.tag.lstrip('vV')} (this is {VERSION}).")
                     self.update_row.grid(row=7, column=0, columnspan=3, sticky="w", pady=(6, 0))
+                elif event[0] == "update-progress":
+                    _, done, total = event
+                    self.progress.configure(value=done, maximum=total or max(done, 1))
+                    if total:
+                        self.status.set(f"Downloading: {done * 100 // total}%")
+                elif event[0] == "update-done":
+                    # The new exe starts with a fresh environment (PYINSTALLER_RESET_ENVIRONMENT, set in main).
+                    subprocess.Popen([str(event[1])], close_fds=True)
+                    self.root.destroy()
+                    return
+                elif event[0] == "update-error":
+                    self.running = False
+                    self._refresh_run()
+                    self.update_button.configure(state="normal")
+                    self.progress.configure(value=0)
+                    self.status.set("The update failed. The program was not changed.")
+                    messagebox.showerror(TITLE, f"{event[1]}\n\nThe program was not changed. "
+                                                "The release page opens: download the new version there.")
+                    if self.release:
+                        webbrowser.open(self.release.page)
                 elif event[0] == "error":
                     self.status.set("The checks stopped with an error.")
                     self.running = False
@@ -447,6 +496,9 @@ def main() -> None:
         # this, a report link that the browser opens later starts checker.exe as a part of this run, whose temporary
         # folder is gone by then: "Failed to load Python DLL". PyInstaller 6.10+ reads this variable.
         os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        remove_old(Path(sys.executable))  # the exe that an update replaced
+        # Just after an update the old process may still be closing: try again a little later.
+        threading.Timer(10, remove_old, args=(Path(sys.executable),)).start()
     root = Tk()
     if ICON.is_file():
         try:

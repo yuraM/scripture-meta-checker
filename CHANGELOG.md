@@ -2,6 +2,15 @@
 
 Changes of the Scripture checker by release. Releases: https://github.com/yuraM/scripture-meta-checker/releases
 
+## Unreleased
+
+### What's new
+
+- **Update button:** when a new version is ready, the button **Update** downloads it and starts it; you do not
+  need to download it in the browser. The file is checked before it is used. If the update is not possible (for
+  example, no rights to write into the folder of the program), the program stays as it was and the release page
+  opens.
+
 ## 1.0.2 (2026-11-12)
 
 ### What's new

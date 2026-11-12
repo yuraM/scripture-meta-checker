@@ -1104,6 +1104,40 @@ class UpdateTest(unittest.TestCase):
         with mock.patch("urllib.request.urlopen", side_effect=OSError("offline")):
             self.assertIsNone(updates.newer_release("1.0"))
 
+    def test_release_asset(self):
+        from checker.updates import release_from_json
+        release = release_from_json({"tag_name": "v1.2", "html_url": "page", "assets": [
+            {"name": "other.zip"},
+            {"name": "checker.exe", "size": 3, "digest": "sha256:ABC", "browser_download_url": "url"}]})
+        self.assertEqual((release.tag, release.url, release.size, release.sha256), ("v1.2", "url", 3, "abc"))
+        self.assertEqual(release_from_json({"tag_name": "v1.2"}).url, "")  # no exe: the page is opened
+
+    def test_update_swaps_the_files_and_checks_the_download(self):
+        import hashlib
+        import io
+        from unittest import mock
+        from checker import updates
+        content = b"new program"
+        good = updates.Release("v9", "page", "https://example.org/checker.exe", len(content), hashlib.sha256(content).hexdigest())
+
+        def answer(*args, **kwargs):
+            response = io.BytesIO(content)
+            response.headers = {}
+            return response
+        with tempfile.TemporaryDirectory() as folder:
+            exe = Path(folder) / "checker.exe"
+            exe.write_bytes(b"old program")
+            with mock.patch("urllib.request.urlopen", side_effect=answer):
+                with self.assertRaises(updates.UpdateError):  # damaged download: nothing changes
+                    updates.update(updates.Release("v9", "page", "https://example.org/checker.exe", len(content), "0" * 64), exe)
+                self.assertEqual(exe.read_bytes(), b"old program")
+                self.assertFalse(updates.new_exe(exe).exists())
+                updates.update(good, exe)
+            self.assertEqual(exe.read_bytes(), content)
+            self.assertEqual(updates.old_exe(exe).read_bytes(), b"old program")
+            updates.remove_old(exe)
+            self.assertFalse(updates.old_exe(exe).exists())
+
 
 class WindowTest(unittest.TestCase):
     def test_report_folder_is_not_inside_the_paratext_folder(self):
