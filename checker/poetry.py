@@ -60,6 +60,11 @@ def _sentence_end_marks(ctx: CheckContext) -> frozenset[str]:
     return frozenset(ch for ch in marks if any(name in unicodedata.name(ch, "") for name in SENTENCE_END_NAMES))
 
 
+def _few_lines(lines: list[Analysis]) -> str:
+    return (f"Not checked: the project has only {len(lines)} poetry lines (\\q); {MIN_LINES} are needed to know "
+            "what a long line is.")
+
+
 def long_line_limit(lines: list[Analysis]) -> int | None:
     """Length that 95% of the poetry lines do not pass; None when there are too few lines."""
     lengths = sorted(len(analysis.segment.text.strip()) for analysis in lines)
@@ -97,7 +102,10 @@ def _sentence_end(text: str, marks: frozenset[str], ctx: CheckContext) -> int | 
 def check_poetry_two_sentences(lines: list[Analysis], ctx: CheckContext) -> Iterator[Finding]:
     limit = long_line_limit(lines)
     marks = _sentence_end_marks(ctx)
-    if limit is None or not marks:
+    if limit is None:
+        ctx.skipped["poetry-two-sentences"] = _few_lines(lines)
+        return
+    if not marks:
         return
     for analysis in lines:
         text = analysis.segment.text
@@ -207,6 +215,7 @@ def check_poetry_long_lines(lines: list[Analysis], ctx: CheckContext) -> Iterato
     """Very long poetry lines without a sentence end inside (those are poetry-two-sentences)."""
     lengths = sorted(len(analysis.segment.text.strip()) for analysis in lines)
     if len(lengths) < MIN_LINES:
+        ctx.skipped["poetry-long-lines"] = _few_lines(lines)
         return
     limit = max(lengths[int(len(lengths) * LONG_LINE_SHARE) - 1], round(LONG_LINE_TIMES * lengths[len(lengths) // 2]),
                 MIN_LONG)

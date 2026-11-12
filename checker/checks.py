@@ -14,7 +14,7 @@ from checker.poetry import (
     check_poetry_two_sentences, check_poetry_verse_inside, is_poetry_line,
 )
 from checker.approvals import check_approvals
-from checker.divine_name import VerseNd, check_divine_name
+from checker.divine_name import VerseNd, check_divine_name, usual_nd_words
 from checker.footnotes import Note, check_footnote_quotes, check_footnotes, read_notes
 from checker.hyphenation import inconsistent_affixes, is_unhyphenated, rule_violations, word_scripts
 from checker.model import ERROR, WARNING, Analysis, CheckContext, Finding  # noqa: F401 (re-exported)
@@ -861,6 +861,10 @@ def check_divine_name_verses(usage: UsageCounter, ctx: CheckContext) -> Iterator
     if ctx.to_original is None:
         ctx.skipped["divine-name"] = (f"Not checked: the versification of the project "
                                       f"({ctx.settings.versification}) is not a standard one.")
+        return
+    if not usual_nd_words(usage.style_refs):
+        ctx.skipped["divine-name"] = ("Not checked: no word of the project is nearly always in \\nd (the divine name "
+                                      "is not marked with \\nd, or too seldom).")
         return
     yield from check_divine_name(usage.style_refs, usage.nd_places, usage.verse_texts, ctx.to_original)
 

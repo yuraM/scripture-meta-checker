@@ -298,6 +298,16 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertEqual([f.ref for f in found], ["1:20", "1:21"])
         self.assertIn("not Cyrillic", found[0].message)
 
+    def test_missing_sources(self):
+        from dataclasses import replace
+        from checker.cli import missing_sources
+        from checker.spelling import SpellingList
+        self.ctx.settings = replace(self.settings, pairs=(), number_ordinals=frozenset(), normalization_form="")
+        self.ctx.spelling = SpellingList({})
+        reasons = missing_sources(self.ctx)
+        self.assertTrue({"pairs", "ordinals", "normalization", "spelling", "hyphenation", "lists"} <= set(reasons))
+        self.assertIn("Wordlist is empty", reasons["spelling"])
+
     def test_term_rendering_words(self):
         from checker.terms import rendering_words
         self.assertEqual(rendering_words("земл*, де тече молоко і мед"), 6)
@@ -1112,7 +1122,7 @@ class ReportTest(unittest.TestCase):
         self.assertIn('href="txt/"', index)
         self.assertIn('href="../index.html"', page)
         self.assertIn('href="../txt/spelling.txt"', page)
-        self.assertIn("not checked", index)
+        self.assertIn('<span class="e">!</span> <span class="z">Not checked: test</span>', index)
         # The text of the problems is data: "</script>" inside it must not end the script element.
         data = re.search(r'id="data">(.*?)</script>', page, re.S).group(1)
         self.assertEqual(json.loads(data)[0]["where"], "MAT 1:1, 1:2")

@@ -436,6 +436,14 @@ Notes on `terms` / `term-lists` (`checker/terms.py`, added 2026-11-03):
 - TermRenderings.xml also keeps terms of other lists (24k entries vs 8.9k terms, 291 guesses): only terms of the
   project list are checked, as Paratext shows only those.
 - `ctx.notes` (check -> text) is a general way to say what a check did not list; txt and HTML show it.
+- **"!" instead of 0** (user decision 2026-11-12): a check with nothing to check with is not run and is marked
+  "not checked" with the reason (`ctx.skipped`). `cli.missing_sources` decides before the run: empty Wordlist
+  (spelling, mixed-capitalization), no hyphenatedWords.txt (hyphenation), both (lists), nothing marked in the
+  Characters / Punctuation inventory, no quotation marks, no Pairs, empty Ordinal list, no NormalizationForm. Some
+  checks decide themselves: terms files, ParallelPassageStatus.xml, divine-name (no word nearly always in `
+d`),
+  poetry-two-sentences / poetry-long-lines (fewer than 100 poetry lines). index.html shows a red `!` and the first
+  sentence of the reason (the whole reason as a tooltip), the console `!  not checked: …`, the txt the reason.
 
 Notes on `divine-name` (`checker/divine_name.py`, added 2026-11-05, user request: keep the map in the program so no
 base project is needed):

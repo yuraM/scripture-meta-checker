@@ -200,7 +200,10 @@ def _page(title: str, body: str) -> str:
 
 def _counts(result: CheckResult) -> str:
     if result.skipped:
-        return '<td class="n z" colspan="3">not checked</td>'
+        # "!" instead of 0: the check had nothing to check with (a file or a list of the project is missing).
+        reason = html.escape(result.skipped)
+        short = html.escape(result.skipped.split(". ")[0].rstrip("."))
+        return f'<td class="n" colspan="3" title="{reason}"><span class="e">!</span> <span class="z">{short}</span></td>'
     errors = f'<span class="e">{result.errors}</span>' if result.errors else '<span class="z">0</span>'
     warnings = f'<span class="w">{result.warnings}</span>' if result.warnings else '<span class="z">0</span>'
     return f'<td class="n">{errors}</td><td class="n">{warnings}</td><td class="n">{len(result.problems)}</td>'

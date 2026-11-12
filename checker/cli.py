@@ -185,6 +185,38 @@ def project_books(project: Path) -> list[tuple[str, str]]:
     return sorted(books.items(), key=lambda item: (book_order(item[0]), item[0]))
 
 
+def missing_sources(ctx: CheckContext) -> dict[str, str]:
+    """Checks that have nothing to check with: a file of the project is missing or empty, or the list in Paratext is
+    empty. They are not run; the reports show "!" with the reason instead of 0 problems."""
+    settings = ctx.settings
+    hyphenation = ctx.hyphenation
+    no_wordlist = not ctx.spelling.entries
+    no_hyphenation = not hyphenation or not hyphenation.words
+    reasons = {}
+    if no_wordlist:
+        for name in ("spelling", "mixed-capitalization"):
+            reasons[name] = (f"Not checked: the {places.WORDLIST} is empty (SpellingStatus.xml is missing in the "
+                             "project folder or has no words).")
+    if no_hyphenation:
+        reasons["hyphenation"] = (f"Not checked: {HYPHENATION_FILE} is missing or has no words (Paratext "
+                                  f"{places.WORDLIST}, column Hyphenation).")
+    if no_wordlist and no_hyphenation:
+        reasons["lists"] = f"Not checked: the {places.WORDLIST} and {HYPHENATION_FILE} are both empty or missing."
+    if not settings.valid_characters and not settings.invalid_characters:
+        reasons["characters"] = f"Not checked: nothing is marked in {places.inventory(places.CHARACTERS)}."
+    if not settings.valid_punctuation and not settings.invalid_punctuation:
+        reasons["punctuation"] = f"Not checked: nothing is marked in {places.inventory(places.PUNCTUATION)}."
+    if not settings.quote_levels:
+        reasons["quotes"] = f"Not checked: the quotation marks are not set in Paratext ({places.QUOTATION_RULES})."
+    if not settings.pairs:
+        reasons["pairs"] = "Not checked: Settings.xml has no Pairs (brackets such as ( ) and [ ])."
+    if not settings.number_ordinals:
+        reasons["ordinals"] = f"Not checked: the Ordinal list is empty ({places.NUMBER_SETTINGS})."
+    if not settings.normalization_form:
+        reasons["normalization"] = "Not checked: Settings.xml has no NormalizationForm."
+    return reasons
+
+
 def run_checks(
     project: Path, checks: Sequence[str], books: Sequence[str] | None, language: str | None = None,
     skipped: dict[str, str] | None = None, progress: Callable[[int, int, str], None] | None = None,
@@ -213,6 +245,9 @@ def run_checks(
     ctx.to_original = project_to_original(project, settings.versification)
     ctx.verse_counts = verse_counts(project, settings.versification)
     ctx.english_counts = english_counts()
+    for name, reason in missing_sources(ctx).items():
+        if name in checks:
+            ctx.skipped[name] = reason
     if any(name in TERM_CHECKS for name in checks):
         ctx.terms, ctx.terms_problem = load_terms(project, settings.biblical_terms_list, settings.versification)
     wanted = {code.upper() for code in books} if books else None
@@ -243,7 +278,7 @@ def run_checks(
                           f"the book {book} is in two files: {other_file} and {path.name}. "
                           "References to this book use the last file", "")
         for name in checks:
-            if name in SOURCE_CHECKS:
+            if name in SOURCE_CHECKS and name not in ctx.skipped:
                 yield from SOURCE_CHECKS[name](book, content, ctx, path.name)
         analyses = []
         for segment in segments:
@@ -251,19 +286,25 @@ def run_checks(
             analyses.append(analysis)
             usage.add(analysis, ctx)
             for name in checks:
-                if name in CHECKS:
+                if name in CHECKS and name not in ctx.skipped:
                     yield from CHECKS[name](analysis, ctx)
         for name in checks:
-            if name in BOOK_CHECKS:
+            if name in BOOK_CHECKS and name not in ctx.skipped:
                 yield from BOOK_CHECKS[name](analyses, ctx)
 
     if progress:
         progress(len(sources), len(sources) + 1, "checks of the whole project")
     for name in checks:
-        if name in PROJECT_CHECKS:
+        if name in PROJECT_CHECKS and name not in ctx.skipped:
             yield from PROJECT_CHECKS[name](usage, ctx)
     if progress:
         progress(len(sources) + 1, len(sources) + 1, "done")
+
+
+def short_reason(reason: str) -> str:
+    """"Not checked: X. More." -> "not checked: X" for one line of a summary."""
+    first = reason.split(". ")[0].rstrip(".")
+    return first[:1].lower() + first[1:]
 
 
 def format_locations(findings: Sequence[Finding]) -> str:
@@ -339,7 +380,7 @@ def write_report(findings: list[Finding], checks: Sequence[str], unique: bool, o
     if len(selected) > 1:
         print(f"\n{SEPARATOR}\n\nTOTAL", file=out)
         for name, group in selected:
-            print(f"  {name:22} {'not checked' if name in skipped else count_text(group)}", file=out)
+            print(f"  {name:22} {'!  not checked' if name in skipped else count_text(group)}", file=out)
         print(f"  {'all checks':22} {count_text(findings)}", file=out)
 
 
@@ -434,7 +475,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run = new_run_folder(args.report_dir)
         results = write_reports(args.project, findings, checks, run, args.unique, skipped, notes)
         for result in results:
-            counts = ("  not checked" if result.skipped
+            counts = (f"     !  {short_reason(result.skipped)}" if result.skipped
                       else f"{result.errors:6} errors {result.warnings:7} warnings")
             print(f"{result.name:22} {counts}  -> {run / TXT_FOLDER / (result.name + '.txt')}")
         print(f"HTML report: {run / 'index.html'}")
