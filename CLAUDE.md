@@ -269,6 +269,7 @@ wordlist/
 | `dashes` (opt-in, Unit 3 > Punctuation) | text (not front/back matter) | — | a dash between two spaces that is not the one used in ≥90% of ≥20 such places; a sign used ≥20 times elsewhere (a dialogue dash `―` at line starts) has another role and is not listed |
 | `ellipses` (opt-in, Unit 3 > Punctuation) | text (not front/back matter: `OTH` has program strings) | — | `…` / `...` / `. . .` not the usual one (≥90% of ≥20) |
 | `heading-case` (opt-in, Unit 4 > Capital letters) | `\s#`/`\ms#` + case statistics | — | per style: headings with ≥2 capitals on words written small everywhere else (Title Case) among Sentence case headings, or the reverse; words after `:` or a dash do not count. Repo projects: 0-2 |
+| `all-caps` (opt-in, Unit 4 > Capital letters) | all segments (not front/back matter) | — | a word of ≥2 cased letters written all in capitals that is written otherwise ≥3× and in capitals in ≤10% of its places (the usual form is shown; "if it is the divine name, mark it \nd"). Not counted: `\nd \sc \sls`, titles and headings, `\pc` inscriptions (MENE, KING OF KINGS), Roman numerals (Latin and the Cyrillic look-alikes І Х). Added 2026-11-12 (user: "a word in all caps can be an error"); repo projects: 0-2 (`SENHOR`, `TUHAN` without `\nd`; one intro emphasis `Я ЕСТЬ`) |
 | `note-callers` (opt-in, Unit 5 > Footnotes) | raw `\f \fe \x \ex` callers | — | per note marker: `+`, `-` or a letter that is not the usual one (≥90% of ≥20); repo projects: 0 |
 | `book-name-forms` (opt-in, Unit 5 > References) | `\xt` parts (leading words such as "see" dropped) | — | one book named two ways: the rare name when the usual one is used ≥20× and ≥10× more; forms of one name (`Psalm`/`Psalms`) and front/back matter are skipped. Repo projects: 0-2 (`Luk` among 1345 `Lk`) |
 | `untranslated-verses` (opt-in, Unit 2 > Verse text) | verse texts (not front/back matter: tables with English names) | — | ≥50% of ≥20 letters in another script than the project's main one, or ≥70% of ≥5 small-letter words occur only in this verse (names are capitalized). Repo projects: 0-1, both lists of rare words (LEV 11:30 lizards, 2TI 3:3 vices): a safety net |
@@ -320,7 +321,7 @@ book in order, because a quote may span paragraphs and chapters. Design:
   are warnings marked "(in a footnote)".
 
 `unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `divine-name`, `numbers`, `footnotes`, `references`, `untranslated-verses`, `repeated-text`, `verse-lengths`, `glossary-words`, `figures`, `dashes`, `ellipses`,
-`heading-case`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `self-references`, `one-chapter-books`, `term-renderings`,
+`heading-case`, `all-caps`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `self-references`, `one-chapter-books`, `term-renderings`,
 `poetry-numbers`, `line-ends`, `poetry-two-sentences`, `poetry-long-lines`, `poetry-verse-inside`,
 `poetry-chapter-break`, `parallel-changes`,
 `parallel-differences`, `terms` and `term-lists` are project-level checks (`PROJECT_CHECKS`): they run once after

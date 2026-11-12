@@ -264,3 +264,46 @@ def check_note_callers(sources: list[tuple[str, str]], ctx: CheckContext) -> Ite
                            f"the note \\{marker} has the caller '{match.group(2)}', but {usual_count} of {total} notes "
                            f"\\{marker} use {shown}", " ".join(content[match.start():match.start() + 80].split()))
         yield from _rare(places, lambda place: place[3], "note-callers", "caller", message)
+
+
+# --- all-caps: a word written in capitals that the project writes otherwise ---
+
+SMALL_CAPS_STYLES = frozenset({"nd", "sc", "sls"})  # printed in (small) capitals anyway
+NOT_TEXT_CAPS_RE = re.compile(r"(mt\d*|toc\d|h|imt\d*|is\d*|ms\d*|mr|s\d*|sp|cl|qa|r|sr|d|iot|pc)$")
+ROMAN_NUMERAL_LETTERS = frozenset("IVXLCDMІХ")  # Latin, and the Cyrillic І Х that look the same
+MIN_OTHER_FORMS = 3  # the word is written another way at least this often
+MAX_CAPS_SHARE = 0.1  # and in capitals in at most this part of its places
+
+
+def check_all_caps(segments: list[Segment], ctx: CheckContext) -> Iterator[Finding]:
+    """A word written all in capitals ("SENHOR") that the project writes otherwise nearly everywhere: Caps Lock, or
+    the divine name without \\nd. Not counted: small-caps styles (\\nd, \\sc), titles and headings, inscriptions (\\pc:
+    "MENE, MENE"), Roman numerals (II, IV), words of one letter, front/back matter."""
+    capitals: dict[str, list[tuple[Segment, re.Match[str]]]] = {}
+    forms: dict[str, Counter] = {}
+    for segment in segments:
+        if segment.book in PERIPHERAL_BOOKS:
+            continue
+        for match in QUOTE_WORDS_RE.finditer(segment.text):
+            word = match.group()
+            cased = [ch for ch in word if ch.lower() != ch.upper()]
+            if len(cased) < 2:
+                continue
+            if word.isupper():
+                if (segment.styles_at(match.start()) & SMALL_CAPS_STYLES or NOT_TEXT_CAPS_RE.match(segment.style)
+                        or set(word) <= ROMAN_NUMERAL_LETTERS):
+                    continue
+                capitals.setdefault(word.lower(), []).append((segment, match))
+            else:
+                forms.setdefault(word.lower(), Counter())[word] += 1
+    for key, places in capitals.items():
+        other = forms.get(key, Counter())
+        total = sum(other.values())
+        if total < MIN_OTHER_FORMS or len(places) > (len(places) + total) * MAX_CAPS_SHARE:
+            continue
+        usual = other.most_common(1)[0][0]
+        for segment, match in places:
+            word = match.group()
+            yield _finding(segment, match.start(), len(word), "all-caps", word,
+                           f"'{word}' is written in capitals, but {total} times elsewhere as '{usual}': write "
+                           f"'{usual}' (if it is the divine name, mark it \\nd {usual}\\nd*)")

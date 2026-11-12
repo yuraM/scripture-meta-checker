@@ -353,6 +353,16 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         found = list(forms.check_note_callers(sources, self.ctx))
         self.assertEqual([(f.ref, f.item) for f in found], [("1:25", "\\f a")])
 
+    def test_all_caps(self):
+        from checker import forms
+        usfm = ("\\id TST\n\\c 1\n\\p \\v 1 " + " ".join("Господь сказав." for _ in range(5)) +
+                " \\v 2 І сказав ГОСПОДЬ слово. \\nd ГОСПОДЬ\\nd* тут. Розділ II і IV.\n"
+                "\\pc МЕНЕ, МЕНЕ, ТЕКЕЛ\n\\s1 ГОСПОДЬ ЦАР\n\\p \\v 3 мене, мене, мене.")
+        usage = self._poetry_usage(usfm)
+        found = list(forms.check_all_caps(usage.segments, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in found], [("1:2", "ГОСПОДЬ")])
+        self.assertIn("\\nd Господь\\nd*", found[0].message)
+
     def test_heading_case(self):
         from checker import forms
         words = "\\p \\v 1 " + " ".join("Тут слово, і там дім, і ще міст." for _ in range(3)) + "\n"

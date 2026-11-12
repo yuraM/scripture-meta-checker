@@ -28,6 +28,8 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 - **dashes**, **ellipses** (Unit 3): `-` among `–` between spaces, `...` among `…`.
 - **heading-case** (Unit 4): a heading with a capital on each word among headings with a capital only on the first
   word, or the other way.
+- **all-caps** (Unit 4): a word written all in capitals (`SENHOR`) where the project writes it otherwise
+  (`Senhor`, or `\nd Senhor\nd*`): Caps Lock, or the divine name without `\nd`.
 - **note-callers** (Unit 5): a note with another caller (`\f +`, `\x -`) than the other notes.
 - **book-name-forms** (Unit 5): one book named two ways in references (`Lk` and `Luk`).
 - **apostrophes** (Unit 3): a sign between two letters that is not the one the project nearly always uses

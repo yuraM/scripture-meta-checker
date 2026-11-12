@@ -9,7 +9,7 @@ from functools import lru_cache
 
 from checker import places
 from checker.forms import (
-    check_apostrophes, check_dashes, check_digit_systems, check_ellipses, check_fractions, check_heading_case,
+    check_all_caps, check_apostrophes, check_dashes, check_digit_systems, check_ellipses, check_fractions, check_heading_case,
     check_note_callers, check_untranslated,
 )
 from checker.verses import check_figures, check_glossary_words, check_repeated_text, check_verse_lengths
@@ -1204,6 +1204,7 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "figures": lambda usage, ctx: check_figures(usage.sources, ctx.project, ctx),
     "dashes": lambda usage, ctx: check_dashes(usage.segments, ctx),
     "ellipses": lambda usage, ctx: check_ellipses(usage.segments, ctx),
+    "all-caps": lambda usage, ctx: check_all_caps(usage.segments, ctx),
     "heading-case": lambda usage, ctx: check_heading_case(usage.flow, usage.case_refs, ctx),
     "note-callers": lambda usage, ctx: check_note_callers(usage.sources, ctx),
     "book-name-forms": check_book_name_forms,
