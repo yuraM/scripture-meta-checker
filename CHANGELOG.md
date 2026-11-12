@@ -2,7 +2,7 @@
 
 Changes of the Scripture checker by release. Releases: https://github.com/yuraM/scripture-meta-checker/releases
 
-## Unreleased
+## 1.0.2 (2026-11-12)
 
 ### What's new
 
@@ -10,11 +10,6 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
   need to download it in the browser. The file is checked before it is used. If the update is not possible (for
   example, no rights to write into the folder of the program), the program stays as it was and the release page
   opens.
-
-## 1.0.2 (2026-11-12)
-
-### What's new
-
 - **divine-name** (unit 6, Review lists): finds the name of God (LORD) without `\nd` in verses where other
   translations have it in `\nd`, for example `Herren sa` in a verse where every other `Herren` is in `\nd`. It also
   compares how many times: a verse with two LORD in `\nd` elsewhere but only one `\nd` here is shown. Psalm titles are
