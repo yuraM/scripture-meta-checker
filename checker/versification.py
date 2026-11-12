@@ -136,3 +136,42 @@ def project_to_original(project: Path, versification: str) -> Callable[[Verse], 
     custom_text = custom_path.read_text(encoding="utf-8-sig") if custom_path.is_file() else ""
     to_original = _project_to_original(versification, custom_text)
     return lambda verse: to_original.get(verse, verse)
+
+
+_COUNT_LINE_RE = re.compile(r"([0-9A-Z]{3})((?:\s+\d+:\d+)+)\s*$")
+VerseCounts = dict[str, dict[int, int]]
+
+
+def read_counts(text: str) -> VerseCounts:
+    """Lines "GEN 1:31 2:25 3:24 …" of a .vrs file: book -> chapter -> number of verses."""
+    counts: VerseCounts = {}
+    for line in text.splitlines():
+        match = _COUNT_LINE_RE.match(line.split("#", 1)[0].strip())
+        if match:
+            chapters = counts.setdefault(match.group(1), {})
+            for chapter, verses in re.findall(r"(\d+):(\d+)", match.group(2)):
+                chapters[int(chapter)] = int(verses)
+    return counts
+
+
+@lru_cache(maxsize=None)
+def _standard_counts(name: str) -> VerseCounts:
+    return read_counts(Path(__file__).with_name(name).read_text(encoding="utf-8-sig"))
+
+
+def english_counts() -> VerseCounts:
+    return _standard_counts(ENGLISH_VRS.name)
+
+
+def verse_counts(project: Path, versification: str) -> VerseCounts | None:
+    """Verses per chapter in the versification of the project, changed by its custom.vrs; None = the versification
+    is not known here (Original: org.vrs is not part of the program)."""
+    versification = versification or "4"
+    if versification not in STANDARD_FILES:
+        return None
+    counts = {book: dict(chapters) for book, chapters in _standard_counts(STANDARD_FILES[versification]).items()}
+    custom_path = project / CUSTOM_VRS
+    if custom_path.is_file():
+        for book, chapters in read_counts(custom_path.read_text(encoding="utf-8-sig")).items():
+            counts.setdefault(book, {}).update(chapters)
+    return counts

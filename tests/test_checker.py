@@ -277,6 +277,27 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         slash = self._poetry_usage("\\id TST\n\\c 1\n\\p \\v 1 1/2 і 1/3 і 1⁄4")
         self.assertEqual(list(forms.check_fractions(slash.segments, self.ctx)), [])
 
+    def test_missing_last_verses_and_chapters(self):
+        from checker.structure import check_structure
+        usfm = "\\id TST\n\\c 1\n\\p \\v 1 а \\v 2 б\n\\c 2\n\\p \\v 1 в"
+        counts = {1: 3, 2: 1, 3: 5, 4: 2}
+        english = {1: 3, 2: 1, 3: 5}  # chapter 4 only in this versification (like Psalm 151): not reported
+        found = [f for f in check_structure("TST", usfm, counts=counts, english=english)
+                 if "versification" in f.message]
+        self.assertEqual([(f.ref, f.item) for f in found], [("2:0", "\\c 3"), ("1:2", "1:3")])
+        self.assertEqual([f for f in check_structure("TST", usfm) if "versification" in f.message], [])
+
+    def test_untranslated_verses(self):
+        from collections import Counter
+        from checker.forms import check_untranslated
+        texts = {("TST", 1, n): f"Слово {n} тут і там, і знову слово тут." for n in range(1, 20)}
+        texts[("TST", 1, 20)] = "And the dragon stood on the shore of the sea."           # another alphabet
+        texts[("TST", 1, 21)] = "Ми побачили сірих корабликів, ясних парусів, швидких веслярів."  # words found nowhere
+        words = Counter(word for text in texts.values() for word in text.replace(",", " ").replace(".", " ").split())
+        found = list(check_untranslated(texts, words, self.ctx))
+        self.assertEqual([f.ref for f in found], ["1:20", "1:21"])
+        self.assertIn("not Cyrillic", found[0].message)
+
     def test_term_rendering_words(self):
         from checker.terms import rendering_words
         self.assertEqual(rendering_words("земл*, де тече молоко і мед"), 6)

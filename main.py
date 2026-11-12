@@ -34,6 +34,7 @@ CHECKS = [
     "paragraph-final",       # last punctuation of a paragraph; headings ending with "."
     "ordinals",              # NumberOrdinals: "5-го", "8th", "ke-430"
     "usfm",                  # unclosed markers and notes, chapter/verse numbering, empty verses, \fr vs verse
+    "untranslated-verses",   # verse left in another language (other alphabet, words found nowhere else)
     "book-titles",           # \toc1 = \mt2 + \mt1, \toc2 = \h
     "special-spaces",        # narrow no-break space U+202F, "\fv 13 \fv*", н.~э., marks in verse lists
     "hyphenation",           # hyphenatedWords.txt: rules, consistency, missing words

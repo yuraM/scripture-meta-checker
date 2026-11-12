@@ -10,7 +10,7 @@ from collections.abc import Iterable
 
 STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Unit 1. Project settings and lists", ("lists", "approvals", "term-lists", "term-renderings")),
-    ("Unit 2. File structure", ("usfm", "book-titles", "normalization", "special-spaces")),
+    ("Unit 2. File structure", ("usfm", "untranslated-verses", "book-titles", "normalization", "special-spaces")),
     ("Unit 3. Characters and punctuation",
      ("characters", "scripts", "apostrophes", "punctuation", "paragraph-final", "quotes", "pairs",
       "spacing", "numbers", "digit-systems", "fractions")),
@@ -28,7 +28,7 @@ STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
 GROUPS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
     (1, "Wordlist and inventories", ("lists", "approvals")),
     (1, "Biblical terms lists", ("term-lists", "term-renderings")),
-    (2, "Markers and titles", ("usfm", "book-titles")),
+    (2, "Verses, markers and titles", ("usfm", "untranslated-verses", "book-titles")),
     (2, "Invisible characters", ("normalization", "special-spaces")),
     (3, "Characters", ("characters", "scripts", "apostrophes")),
     (3, "Punctuation", ("punctuation", "paragraph-final")),

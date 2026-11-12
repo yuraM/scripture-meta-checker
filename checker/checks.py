@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterable, Iterator
 from functools import lru_cache
 
 from checker import places
-from checker.forms import check_apostrophes, check_digit_systems, check_fractions
+from checker.forms import check_apostrophes, check_digit_systems, check_fractions, check_untranslated
 from checker.poetry import (
     check_poetry_chapter_break, check_line_ends, check_poetry_long_lines, check_poetry_numbers,
     check_poetry_two_sentences, check_poetry_verse_inside, is_poetry_line,
@@ -1107,7 +1107,9 @@ def check_usfm(book: str, content: str, ctx: CheckContext, file_name: str = "") 
         name_book = book_from_file_name(
             file_name, settings.file_name_pre_part, settings.file_name_post_part, settings.file_name_book_form)
         yield from check_file(book, content, file_name, name_book)
-    yield from check_structure(book, content, ctx.settings.reference_format)
+    counts = ctx.verse_counts.get(book) if ctx.verse_counts else None
+    english = ctx.english_counts.get(book, {}) if ctx.english_counts is not None else None
+    yield from check_structure(book, content, ctx.settings.reference_format, counts, english)
 
 
 # Checks of the raw USFM file (markers, chapter and verse numbers): (book code, file content, ctx, file name).
@@ -1139,6 +1141,7 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "poetry-numbers": lambda usage, ctx: check_poetry_numbers(usage.poetry_lines, ctx),
     "self-references": check_self_references,
     "one-chapter-books": check_one_chapter_books,
+    "untranslated-verses": lambda usage, ctx: check_untranslated(usage.verse_texts, usage.words, ctx),
     "apostrophes": lambda usage, ctx: check_apostrophes(usage.segments, ctx),
     "digit-systems": lambda usage, ctx: check_digit_systems(usage.segments, ctx),
     "fractions": lambda usage, ctx: check_fractions(usage.segments, ctx),

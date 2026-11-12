@@ -34,7 +34,7 @@ from checker.stages import STAGES, in_stage_order, stage_checks
 from checker.structure import NumberForms, book_name_words
 from checker.terms import load_terms
 from checker.usfm import parse_usfm
-from checker.versification import project_to_original
+from checker.versification import english_counts, project_to_original, verse_counts
 
 ALL = "all"
 # Checks run by default; project checks only when named.
@@ -42,6 +42,7 @@ TEXT_CHECKS = [*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS]
 
 # Shown at the top of each report. Keep the English simple: many readers know little English.
 CHECK_DESCRIPTIONS = {
+    "untranslated-verses": "A verse that may be untranslated or in another language: most of its letters are in another alphabet than the project, or nearly all its words occur nowhere else in the project. Lists of rare words (animals, vices) can also be shown.",
     "apostrophes": "A sign between two letters (' ’ ʼ ʻ) that is not the one this project nearly always uses there "
                    "(for example ng'ombe among words with ʼ). Extra material (XXA…) is not checked: it is often in "
                    "another language.",
@@ -210,6 +211,8 @@ def run_checks(
     if notes is not None:
         ctx.notes = notes
     ctx.to_original = project_to_original(project, settings.versification)
+    ctx.verse_counts = verse_counts(project, settings.versification)
+    ctx.english_counts = english_counts()
     if any(name in TERM_CHECKS for name in checks):
         ctx.terms, ctx.terms_problem = load_terms(project, settings.biblical_terms_list, settings.versification)
     wanted = {code.upper() for code in books} if books else None

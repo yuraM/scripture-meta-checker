@@ -10,6 +10,11 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
   example Characters, Punctuation, Numbers and spaces, References, Poetry. Click the name of a
   group to see its checks; they are numbered in the order to fix the problems. The box on the right of the group
   selects all its checks (a dash = only some are selected). The report shows each group with its own heading.
+- **usfm** now also finds the last verses of a chapter, or the last chapters of a book, that are missing: the
+  versification of the project (with its custom.vrs) says how many verses each chapter has. Verses that English Bibles
+  do not have (Greek parts of Daniel, Psalm 151) are not shown.
+- **untranslated-verses** (Unit 2): a verse that may be untranslated or in another language (another alphabet, or
+  words that occur nowhere else in the project).
 - **apostrophes** (Unit 3): a sign between two letters that is not the one the project nearly always uses
   (`ng'ombe` where the project writes `ʼ`).
 - **digit-systems** (Unit 3): digits of another system than most numbers of the project (`۲۷` among `27`).

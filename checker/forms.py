@@ -17,10 +17,12 @@ from collections.abc import Iterator
 
 from checker.model import WARNING, Analysis, CheckContext, Finding
 from checker.structure import PERIPHERAL_BOOKS
+from checker.tokens import LETTER
 from checker.usfm import Segment
 
 MIN_USUAL = 20  # the usual form is used at least this often
 MIN_SHARE = 0.9  # and in at least this part of the places
+QUOTE_WORDS_RE = re.compile(rf"{LETTER}+(?:['’ʼ\-]{LETTER}+)*")  # words, also with an apostrophe
 APOSTROPHES = "'’ʼʻ"
 FRACTION_RE = re.compile(r"(?<![\d/⁄])(\d+)([/⁄])(\d+)(?![\d/⁄])")
 NUMBER_RE = re.compile(r"\d+")
@@ -116,3 +118,40 @@ def check_apostrophes(segments: list[Segment], ctx: CheckContext) -> Iterator[Fi
         yield _finding(segment, index, 1, "apostrophes", sign,
                        f"change '{sign}' to '{usual}' in '{word}': {usual_count} of {len(places)} signs between "
                        f"two letters are '{usual}' (U+{ord(usual):04X})")
+
+
+UNTRANSLATED_MIN_LETTERS = 20  # a verse with fewer letters says too little about its language
+OTHER_SCRIPT_SHARE = 0.5  # this part of the letters in another script than the project's: another language
+UNTRANSLATED_MIN_WORDS = 5  # small-letter words needed for the second sign
+ONLY_HERE_SHARE = 0.7  # this part of them occurs nowhere else in the project
+
+
+def _script(ch: str) -> str:
+    return unicodedata.name(ch, "?").split()[0]
+
+
+def check_untranslated(verse_texts: dict[tuple[str, int, int], str], word_counts: Counter,
+                       ctx: CheckContext) -> Iterator[Finding]:
+    """A verse that looks untranslated (left in the source or another language): most of its letters are in another
+    script than the project, or nearly all its small-letter words occur nowhere else in the project (an English
+    verse in an Indonesian text). Names are capitalized, so lists of names do not count; a list of rare words
+    (animals, vices) may. Front/back matter is not checked: its tables often have English names."""
+    texts = {key: text for key, text in verse_texts.items() if key[0] not in PERIPHERAL_BOOKS}
+    letters = Counter(_script(ch) for text in texts.values() for ch in text if ch.isalpha())
+    if not letters:
+        return
+    main = letters.most_common(1)[0][0]
+    for (book, chapter, verse), text in sorted(texts.items(), key=lambda item: item[0][1:]):
+        verse_letters = [ch for ch in text if ch.isalpha()]
+        other = sum(_script(ch) != main for ch in verse_letters)
+        words = [word for word in QUOTE_WORDS_RE.findall(text) if word[0].islower()]
+        here = Counter(words)
+        only_here = [word for word in words if word_counts[word] <= here[word]]
+        if len(verse_letters) >= UNTRANSLATED_MIN_LETTERS and other >= len(verse_letters) * OTHER_SCRIPT_SHARE:
+            why = f"{other} of its {len(verse_letters)} letters are not {main.title()}"
+        elif len(words) >= UNTRANSLATED_MIN_WORDS and len(only_here) >= len(words) * ONLY_HERE_SHARE:
+            why = f"{len(only_here)} of its {len(words)} words occur nowhere else in the project"
+        else:
+            continue
+        yield Finding(book, f"{chapter}:{verse}", WARNING, "untranslated-verses", f"{chapter}:{verse}",
+                      f"the verse may be untranslated or in another language: {why}", text[:2 * 50])

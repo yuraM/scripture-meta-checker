@@ -78,6 +78,9 @@ class CheckContext:
         self.mixed_case_words: set[str] = set()  # words that spelling left to mixed-capitalization
         # ParallelPassageStatus.xml entries (checker.parallels.PassageStatus); None = the project has no such file.
         self.parallel_passages: list | None = None
+        # Verses per chapter (book -> chapter -> count) in the project's versification and in English; None = unknown.
+        self.verse_counts: dict | None = None
+        self.english_counts: dict | None = None
         # Verse of the project -> Original verse (its versification + custom.vrs); None = unknown versification.
         self.to_original: Callable[[tuple[str, int, int]], tuple[str, int, int]] | None = None
         # Check name -> why it could not run (shown in its report).

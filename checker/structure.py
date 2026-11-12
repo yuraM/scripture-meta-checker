@@ -83,8 +83,11 @@ def _is_heading(style: str) -> bool:
 
 
 class _StructureScanner:
-    def __init__(self, book: str, content: str, reference_format: ReferenceFormat = ReferenceFormat()) -> None:
+    def __init__(self, book: str, content: str, reference_format: ReferenceFormat = ReferenceFormat(),
+                 counts: dict[int, int] | None = None, english: dict[int, int] | None = None) -> None:
         self.book = book
+        # Verses per chapter of this book in the project's versification and in English (None = not known).
+        self.counts, self.english = counts, english
         self.content = content = remove_attributes(content, keep_links=True)
         self.reference_format = reference_format
         self.chapter = 0
@@ -162,6 +165,7 @@ class _StructureScanner:
                 self.verse_start = None
         yield from self._end_verse()
         yield from self._end_paragraph(len(self.content))
+        yield from self._missing_at_end()
 
     def _number(self, match: re.Match) -> str:
         rest = self.content[match.end():match.end() + 40].lstrip(" ")
@@ -291,6 +295,36 @@ class _StructureScanner:
         self.note = None
         self.note_spans = []
 
+    def _missing_at_end(self) -> Iterator[Finding]:
+        """The last verses of a chapter, or the last chapters of the book, are missing: the numbers have no gap, so
+        only the versification of the project (with its custom.vrs) shows it. Verses and chapters that English has not
+        (Septuagint additions: Greek Daniel, Psalm 151, the Prayer of Manasseh) are not reported: a translation may
+        leave them out."""
+        verses = self.index.verses
+        if not self.numbered or not self.counts or not verses:
+            return
+        english = self.english if self.english is not None else self.counts
+        last_chapter = max(verses)
+        missing_chapters = [chapter for chapter in sorted(self.counts)
+                            if chapter > last_chapter and chapter in english]
+        if missing_chapters:
+            shown = _span(missing_chapters[0], missing_chapters[-1])
+            yield Finding(self.book, f"{last_chapter}:0", WARNING, CHECK, f"\\c {shown}",
+                          f"the book ends with chapter {last_chapter}, but the versification of the project has "
+                          f"{max(self.counts)} chapters: chapter {shown} is missing", "")
+        for chapter, total in sorted(self.counts.items()):
+            have = verses.get(chapter)
+            if have is None:
+                continue
+            last = max(have, default=0)
+            limit = min(total, english.get(chapter, 0))
+            if last < limit:
+                shown = _span(last + 1, total)
+                yield Finding(self.book, f"{chapter}:{last}", WARNING, CHECK, f"{chapter}:{shown}",
+                              f"chapter {chapter} ends with verse {last}, but the versification of the project has "
+                              f"{total} verses: verse {shown} is missing, or it is numbered in the next chapter "
+                              "(then the project's custom.vrs must say so)", "")
+
     def _end_paragraph(self, offset: int) -> Iterator[Finding]:
         yield from self._close_note(offset, implicit=True)
         for span in self.spans:
@@ -303,8 +337,10 @@ def _span(first: int, last: int) -> str:
     return str(first) if first == last else f"{first}-{last}"
 
 
-def check_structure(book: str, content: str, reference_format: ReferenceFormat = ReferenceFormat()) -> Iterator[Finding]:
-    yield from _StructureScanner(book, content, reference_format).scan()
+def check_structure(book: str, content: str, reference_format: ReferenceFormat = ReferenceFormat(),
+                    counts: dict[int, int] | None = None, english: dict[int, int] | None = None
+                    ) -> Iterator[Finding]:
+    yield from _StructureScanner(book, content, reference_format, counts, english).scan()
 
 
 def check_file(book: str, content: str, file_name: str, name_book: str | None) -> Iterator[Finding]:
