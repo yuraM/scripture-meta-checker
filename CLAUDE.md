@@ -106,7 +106,7 @@ punctuation, 4 Words, 5 References and terms, 6 Review lists. **Groups inside a 
 layout was tried and rejected, more checks will come). Checks that belong together are a **folded group** at the place
 of their first check (`gui._Fold`): `▸ Poetry (1/2)`, a click opens it, the box on the right selects or clears all its
 checks and shows a dash when only some are selected. Groups now (2026-11-12, user: "put into categories all that can be"):
-Unit 1 Wordlist and inventories, Biblical terms lists; Unit 2 Verses, markers and titles, Invisible characters;
+Unit 1 Wordlist and inventories, Biblical terms lists; Unit 2 Markers and titles, Verse text, Invisible characters;
 Unit 3 Characters, Punctuation, Quotes and brackets, Numbers and spaces; Unit 4 Spelling and word breaks,
 Capital letters; Unit 5 References, Footnotes, Parallel passages; Unit 6 Names, Divine name and styles,
 Poetry and lists. Checks without a partner stay single (repeated-words, ordinals, terms, unused). Select all / Clear all (under
@@ -158,7 +158,9 @@ wordlist/
 │   ├── places.py        # names of Paratext windows/menus used in report texts
 │   ├── approvals.py     # approvals check: approved list entries that look wrong
 │   ├── footnotes.py     # footnotes check: notes built differently from similar ones (raw \f … \f*)
-│   ├── forms.py         # the rare form of the project: apostrophes, digit-systems, fractions
+│   ├── forms.py         # the rare form of the project: apostrophes, digits, fractions, dashes, ellipses, headings, callers
+│   ├── verses.py        # repeated-text, verse-lengths, glossary-words, figures
+│   ├── verse_lengths.txt # letters per verse of an English base translation (Original numbers); numbers only
 │   ├── poetry.py        # the Unit 6 group Poetry: numbers, line ends, two sentences, long lines, verses, chapters
 │   ├── divine_name.py   # divine-name check: the divine name without \nd in verses of nd_verses.txt
 │   ├── nd_verses.txt    # verses (Original numbers) where a base translation has LORD in \nd; numbers only
@@ -260,7 +262,16 @@ wordlist/
 | `name-case` (opt-in) | text frequencies | — | word capitalized mid-sentence in ≤5% of ≥10 occurrences (or lowercase in ≤5%); sentence starts, words after quotes/brackets, headings and all-caps words are not counted |
 | `styled-words` (opt-in) | text + `\nd` spans | — | word in `\nd` in ≤5% of ≥10 occurrences, or without `\nd` in ≤5%; notes are not counted |
 | `divine-name` (opt-in) | `checker/nd_verses.txt` + text `\nd` spans + versification | — | a word the project puts in `\nd` ≥20× and in ≥80% of its places is without `\nd` (and not written small) in a verse that has fewer `\nd` (also none) than an English base translation has LORD in `\nd` there (the map) |
-| `untranslated-verses` (opt-in, Unit 2 > Verses, markers and titles) | verse texts (not front/back matter: tables with English names) | — | ≥50% of ≥20 letters in another script than the project's main one, or ≥70% of ≥5 small-letter words occur only in this verse (names are capitalized). Repo projects: 0-1, both lists of rare words (LEV 11:30 lizards, 2TI 3:3 vices): a safety net |
+| `repeated-text` (opt-in, Unit 2 > Verse text) | verse texts (`UsageCounter.verse_ranges`: `\v 6-7` share a text) | — | a verse with the same words (≥5) as the verse before; 3+ words written twice with only spaces between ("Answer me, answer me" has a comma: on purpose, not listed; the same sentence twice in a verse is not listed). Repo projects: 0-2 (EZR 7:16 a copied half line) |
+| `verse-lengths` (opt-in, Unit 2 > Verse text) | verse texts + `checker/verse_lengths.txt` (letters per verse of an English base translation, Original numbers, numbers only; made by `local_tools/make_verse_lengths.py <base project>`, bundled into the exe) | — | letters / base letters 3× below or above the project's median ratio (≥200 verses to compare, base verse ≥40 letters, ranges skipped). Repo projects: 0-24 (numbering differences, a paraphrase that shortens genealogies) |
+| `glossary-words` (opt-in, Unit 2 > Markers and titles) | raw `\w … \w*` (text or `lemma`) + `\k` of the book GLO | — | no entry with the same word or stem (all but the last 3 letters); "!" when there are no `\w` or no GLO entries (one repo project marks 1059 `\w` and has no GLO) |
+| `figures` (opt-in, Unit 2 > Markers and titles) | raw `\fig` (USFM 3 `src=` `ref=` or USFM 2 fields) | — | no file name; `ref` of another chapter or more than 2 verses away; file not in a `figures` folder of the project (only when the folder exists); "!" without `\fig` (no repo project has pictures) |
+| `dashes` (opt-in, Unit 3 > Punctuation) | text (not front/back matter) | — | a dash between two spaces that is not the one used in ≥90% of ≥20 such places; a sign used ≥20 times elsewhere (a dialogue dash `―` at line starts) has another role and is not listed |
+| `ellipses` (opt-in, Unit 3 > Punctuation) | text (not front/back matter: `OTH` has program strings) | — | `…` / `...` / `. . .` not the usual one (≥90% of ≥20) |
+| `heading-case` (opt-in, Unit 4 > Capital letters) | `\s#`/`\ms#` + case statistics | — | per style: headings with ≥2 capitals on words written small everywhere else (Title Case) among Sentence case headings, or the reverse; words after `:` or a dash do not count. Repo projects: 0-2 |
+| `note-callers` (opt-in, Unit 5 > Footnotes) | raw `\f \fe \x \ex` callers | — | per note marker: `+`, `-` or a letter that is not the usual one (≥90% of ≥20); repo projects: 0 |
+| `book-name-forms` (opt-in, Unit 5 > References) | `\xt` parts (leading words such as "see" dropped) | — | one book named two ways: the rare name when the usual one is used ≥20× and ≥10× more; forms of one name (`Psalm`/`Psalms`) and front/back matter are skipped. Repo projects: 0-2 (`Luk` among 1345 `Lk`) |
+| `untranslated-verses` (opt-in, Unit 2 > Verse text) | verse texts (not front/back matter: tables with English names) | — | ≥50% of ≥20 letters in another script than the project's main one, or ≥70% of ≥5 small-letter words occur only in this verse (names are capitalized). Repo projects: 0-1, both lists of rare words (LEV 11:30 lizards, 2TI 3:3 vices): a safety net |
 | `apostrophes` (opt-in, Unit 3 > Characters) | text (not `XXA…`: often another language) | — | a sign between two letters (`' ’ ʼ ʻ`) that is not the one used in ≥90% of ≥20 such places (`ng'ombe` among `ʼ`); measured on the repo projects: 0 (the cases were in extra material) |
 | `digit-systems` (opt-in, Unit 3 > Numbers and spaces) | all segments, all books | — | digits of another system than ≥90% of ≥20 numbers (`۲۷` among `27`); numbers with letters of the digits' own script within 30 characters (`Copyright 1985` in a Myanmar text) are skipped; repo projects: 0 |
 | `fractions` (opt-in, Unit 3 > Numbers and spaces) | all segments, all books (`BAK` tables) | — | `1/2` when more fractions use `⁄` (U+2044); only first number < second (`587/6` is a year); a project that writes `/` is left alone; repo projects: 1 (`1/10` in BAK among 12 `⁄`) |
@@ -308,7 +319,8 @@ book in order, because a quote may span paragraphs and chapters. Design:
 - Notes quote fragments of the text (`Or “I have been given … to`): no level check, all findings
   are warnings marked "(in a footnote)".
 
-`unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `divine-name`, `numbers`, `footnotes`, `references`, `untranslated-verses`, `apostrophes`, `digit-systems`, `fractions`, `self-references`, `one-chapter-books`, `term-renderings`,
+`unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `divine-name`, `numbers`, `footnotes`, `references`, `untranslated-verses`, `repeated-text`, `verse-lengths`, `glossary-words`, `figures`, `dashes`, `ellipses`,
+`heading-case`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `self-references`, `one-chapter-books`, `term-renderings`,
 `poetry-numbers`, `line-ends`, `poetry-two-sentences`, `poetry-long-lines`, `poetry-verse-inside`,
 `poetry-chapter-break`, `parallel-changes`,
 `parallel-differences`, `terms` and `term-lists` are project-level checks (`PROJECT_CHECKS`): they run once after

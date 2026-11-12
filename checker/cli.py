@@ -42,6 +42,15 @@ TEXT_CHECKS = [*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS]
 
 # Shown at the top of each report. Keep the English simple: many readers know little English.
 CHECK_DESCRIPTIONS = {
+    "repeated-text": "A verse with the same words as the verse before it, or a group of words written twice in a row. Verse ranges (\\v 6-7) are not counted.",
+    "verse-lengths": "A verse 3 times shorter or longer than usual, compared with the length of the same verse in an English translation (only lengths are kept in the program). A part may be missing or added, or the verse is numbered another way.",
+    "glossary-words": "A word marked as a glossary word (\\w ... \\w*) that has no entry (\\k) in the glossary book GLO.",
+    "figures": "A picture (\\fig) without a file name, placed in another verse than its reference, or (when the project has a figures folder) whose file is not there.",
+    "dashes": "A dash between two spaces that is not the one the project nearly always uses there (' - ' among ' – ').",
+    "ellipses": "An ellipsis written another way than the project nearly always writes it ('...' among '…').",
+    "heading-case": "A heading written with a capital on each word when the other headings of that style have a capital only on the first word, or the other way. Names are not counted.",
+    "note-callers": "A note with another caller than the project nearly always uses for that kind of note (\\f + or \\x -).",
+    "book-name-forms": "One book named two ways in \\xt references ('Lk 3:23' and 'Luk 3:23'): the rare name is shown.",
     "untranslated-verses": "A verse that may be untranslated or in another language: most of its letters are in another alphabet than the project, or nearly all its words occur nowhere else in the project. Lists of rare words (animals, vices) can also be shown.",
     "apostrophes": "A sign between two letters (' ’ ʼ ʻ) that is not the one this project nearly always uses there "
                    "(for example ng'ombe among words with ʼ). Extra material (XXA…) is not checked: it is often in "
@@ -244,6 +253,7 @@ def run_checks(
         ctx.notes = notes
     ctx.to_original = project_to_original(project, settings.versification)
     ctx.verse_counts = verse_counts(project, settings.versification)
+    ctx.project = project
     ctx.english_counts = english_counts()
     for name, reason in missing_sources(ctx).items():
         if name in checks:

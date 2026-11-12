@@ -80,6 +80,7 @@ class CheckContext:
         self.parallel_passages: list | None = None
         # Verses per chapter (book -> chapter -> count) in the project's versification and in English; None = unknown.
         self.verse_counts: dict | None = None
+        self.project = None  # the project folder (Path), set by cli.run_checks
         self.english_counts: dict | None = None
         # Verse of the project -> Original verse (its versification + custom.vrs); None = unknown versification.
         self.to_original: Callable[[tuple[str, int, int]], tuple[str, int, int]] | None = None

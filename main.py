@@ -21,6 +21,7 @@ CHECKS = [
     "mixed-capitalization",  # mixed-case words approved in SpellingStatus.xml
     "capitalization",        # capital after sentence end, abbreviations
     "spelling",              # SpellingStatus.xml
+    "heading-case",          # heading in Title Case among Sentence case headings (or the reverse)
     "quotes",                # quotation marks: unclosed, wrong level, mismatched
     "pairs",                 # Pairs: ( ) [ ] { } unclosed or mismatched
     "repeated-words",        # "і і"; RepeatableWords / NonRepeatableWords
@@ -28,13 +29,19 @@ CHECKS = [
     "numbers",               # 4-digit numbers written in the rare way of the project (4000 among 4.000)
     "scripts",               # words mixing scripts (Latin "c" in a Cyrillic word)
     "apostrophes",           # the rare apostrophe of the project between two letters (' among ʼ)
+    "dashes",                # " - " among " – " (the rare dash between spaces)
+    "ellipses",              # "..." among "…"
     "digit-systems",         # digits of another system than most numbers (۲۷ among 27)
     "fractions",             # 1/2 where the project writes 1⁄2
     "normalization",         # NormalizationForm (NFC)
     "paragraph-final",       # last punctuation of a paragraph; headings ending with "."
     "ordinals",              # NumberOrdinals: "5-го", "8th", "ke-430"
     "usfm",                  # unclosed markers and notes, chapter/verse numbering, empty verses, \fr vs verse
+    "glossary-words",        # \w glossary word without an entry \k in GLO
+    "figures",               # \fig without a file, in another verse, file not in the figures folder
     "untranslated-verses",   # verse left in another language (other alphabet, words found nowhere else)
+    "repeated-text",         # verse equal to the verse before it, words written twice in a row
+    "verse-lengths",         # verse 3x shorter/longer than usual (lengths of an English translation)
     "book-titles",           # \toc1 = \mt2 + \mt1, \toc2 = \h
     "special-spaces",        # narrow no-break space U+202F, "\fv 13 \fv*", н.~э., marks in verse lists
     "hyphenation",           # hyphenatedWords.txt: rules, consistency, missing words
@@ -51,10 +58,12 @@ CHECKS = [
     "poetry-verse-inside",   # verse number inside a poetry line
     "poetry-chapter-break",  # poetry goes on into the next chapter without 
     "references",            # references: chapters/verses that do not exist, marks not from Settings.xml
+    "book-name-forms",       # one book named two ways in \xt (Lk / Luk)
     "self-references",       # cross reference \x to the verse it stands in
     "one-chapter-books",     # Jude 1:3 and Jude 3 in one project
     "footnotes",             # footnotes built differently from similar ones (Lit.: \fq vs \fqa, missing full stop)
     "footnote-quotes",       # \fq quote of a footnote not found in the verse
+    "note-callers",          # \f + / \x - written another way than usual
     "parallel-changes",      # ParallelPassageStatus.xml: approved parallel verses that were changed later
     "parallel-differences",  # ParallelPassageStatus.xml: parallel verses that differ in a few words
     "terms",                 # Biblical Terms: rendering missing in a verse (clear cases only), unused renderings

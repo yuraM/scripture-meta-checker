@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from checker.model import WARNING, Analysis, CheckContext, Finding
 from checker.structure import PERIPHERAL_BOOKS
@@ -155,3 +155,112 @@ def check_untranslated(verse_texts: dict[tuple[str, int, int], str], word_counts
             continue
         yield Finding(book, f"{chapter}:{verse}", WARNING, "untranslated-verses", f"{chapter}:{verse}",
                       f"the verse may be untranslated or in another language: {why}", text[:2 * 50])
+
+
+# --- dashes, ellipses, headings, note callers: the rare way of the project ---
+
+SPACED_DASH_RE = re.compile(r"(?<=\s)([‐-―−-])(?=\s)")
+ELLIPSIS_RE = re.compile(r"…|(?<!\.)\.\.\.(?!\.)|(?<!\.)\. \. \.(?! \.)")
+HEADING_STYLE_RE = re.compile(r"(s\d?|ms\d?)$")
+MIN_HEADING_WORDS = 2  # words after the first, written small elsewhere, needed to see the case of a heading
+NOTE_CALLER_RE = re.compile(re.escape(chr(92)) + r"(f|fe|ef|x|ex)\s+(\S+)")
+
+
+def _rare(places: list, form_of: Callable, check: str, what: str, message: Callable) -> Iterator[Finding]:
+    """Findings for the places whose form is not the usual one (used in >=90% of >=20 places)."""
+    counts = Counter(form_of(place) for place in places)
+    if len(counts) < 2:
+        return
+    usual, usual_count = counts.most_common(1)[0]
+    if usual_count < MIN_USUAL or usual_count < len(places) * MIN_SHARE:
+        return
+    for place in places:
+        form = form_of(place)
+        if form != usual:
+            yield message(place, form, usual, usual_count, len(places))
+
+
+def _most(places: list) -> str:
+    return Counter(place[1].group(1) for place in places).most_common(1)[0][0] if places else ""
+
+
+def _sign_name(sign: str) -> str:
+    return f"'{sign}' ({unicodedata.name(sign, 'U+%04X' % ord(sign)).lower()})"
+
+
+def check_dashes(segments: list[Segment], ctx: CheckContext) -> Iterator[Finding]:
+    """A dash between two spaces that is not the dash the project nearly always uses there (' - ' among ' – ')."""
+    texts = [segment for segment in segments if segment.book not in PERIPHERAL_BOOKS]
+    places = [(segment, match) for segment in texts for match in SPACED_DASH_RE.finditer(segment.text)]
+    # A dash used often elsewhere (at the start of a line of dialogue) has another role: not a rare form.
+    everywhere = Counter(ch for segment in texts for ch in segment.text if unicodedata.category(ch) == "Pd")
+    places = [place for place in places
+              if everywhere[place[1].group(1)] < MIN_USUAL or place[1].group(1) == _most(places)]
+
+    def message(place, form, usual, usual_count, total):
+        segment, match = place
+        return _finding(segment, match.start(), 1, "dashes", form,
+                        f"change {_sign_name(form)} to {_sign_name(usual)}: {usual_count} of {total} dashes between "
+                        f"spaces are '{usual}'")
+    yield from _rare(places, lambda place: place[1].group(1), "dashes", "dash", message)
+
+
+def check_ellipses(segments: list[Segment], ctx: CheckContext) -> Iterator[Finding]:
+    """An ellipsis written another way than the project nearly always writes it ('...' among '…')."""
+    places = [(segment, match) for segment in segments if segment.book not in PERIPHERAL_BOOKS
+              for match in ELLIPSIS_RE.finditer(segment.text)]
+
+    def message(place, form, usual, usual_count, total):
+        segment, match = place
+        return _finding(segment, match.start(), len(form), "ellipses", form,
+                        f"change '{form}' to '{usual}': {usual_count} of {total} ellipses are written '{usual}'")
+    yield from _rare(places, lambda place: place[1].group(), "ellipses", "ellipsis", message)
+
+
+def check_heading_case(flow: list[Segment], case_refs: dict, ctx: CheckContext) -> Iterator[Finding]:
+    """Headings of one style written with a capital on each word (Title Case) or only on the first (Sentence case):
+    the rare way is listed. Only words that are written small everywhere else count, so names do not."""
+    by_style: dict[str, list] = {}
+    for segment in flow:
+        if not HEADING_STYLE_RE.match(segment.style) or segment.book in PERIPHERAL_BOOKS:
+            continue
+        # Words after ":" or a dash start a new part ("Plague six: Boils"), so only the part before counts.
+        words = QUOTE_WORDS_RE.findall(re.split(r"[:\u2010-\u2015]", segment.text)[0])[1:]
+        small = [word for word in words if word[0].isalpha() and not word.isupper()
+                 and not case_refs.get(word.lower(), ([1], []))[0] and len(case_refs.get(word.lower(), ([], []))[1]) >= 3]
+        if len(small) >= MIN_HEADING_WORDS:
+            capitals = [word for word in small if word[0].isupper()]
+            title = len(capitals) >= 2 and len(capitals) * 2 >= len(small)
+            by_style.setdefault(segment.style, []).append((segment, title, small, capitals))
+    for style, places in by_style.items():
+        def message(place, form, usual, usual_count, total):
+            segment, title, small, capitals = place
+            if title:
+                how, example = "a capital on each word", f"write '{capitals[0].lower()}'"
+            else:
+                how, example = "a capital only on the first word", f"write '{small[0].capitalize()}'"
+            return _finding(segment, 0, 1, "heading-case", segment.text.strip()[:60],
+                            f"this heading \\{style} has {how}, but {usual_count} of {total} headings \\{style} are "
+                            f"written the other way: {example}")
+        yield from _rare(places, lambda place: place[1], "heading-case", "heading", message)
+
+
+def check_note_callers(sources: list[tuple[str, str]], ctx: CheckContext) -> Iterator[Finding]:
+    """The caller of a note (\\f + …, \\x - …) that is not the one the project nearly always uses for that kind of note."""
+    from checker.verses import RawRefs
+    by_marker: dict[str, list] = {}
+    refs: dict[str, RawRefs] = {}
+    for book, content in sources:
+        for match in NOTE_CALLER_RE.finditer(content):
+            caller = match.group(2)
+            form = caller if caller in ("+", "-") else "a letter or number"
+            by_marker.setdefault(match.group(1), []).append((book, content, match, form))
+    for marker, places in by_marker.items():
+        def message(place, form, usual, usual_count, total):
+            book, content, match, _ = place
+            chapter, verse = refs.setdefault(book, RawRefs(content)).at(match.start())
+            shown = "+ (numbered by the program)" if usual == "+" else ("- (no caller)" if usual == "-" else usual)
+            return Finding(book, f"{chapter}:{verse}", WARNING, "note-callers", f"\\{marker} {match.group(2)}",
+                           f"the note \\{marker} has the caller '{match.group(2)}', but {usual_count} of {total} notes "
+                           f"\\{marker} use {shown}", " ".join(content[match.start():match.start() + 80].split()))
+        yield from _rare(places, lambda place: place[3], "note-callers", "caller", message)

@@ -18,6 +18,18 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
   do not have (Greek parts of Daniel, Psalm 151) are not shown.
 - **untranslated-verses** (Unit 2): a verse that may be untranslated or in another language (another alphabet, or
   words that occur nowhere else in the project).
+- **repeated-text** (Unit 2): a verse with the same words as the verse before it, or words written twice in a row
+  ("he went to the city he went to the city").
+- **verse-lengths** (Unit 2): a verse 3 times shorter or longer than usual, compared with an English translation
+  (the program keeps only the lengths). A part may be missing, or the verse is numbered another way.
+- **glossary-words** (Unit 2): a glossary word `\w` without an entry in the glossary book GLO.
+- **figures** (Unit 2): a picture `\fig` without a file, placed in another verse than its reference, or whose file
+  is not in the figures folder.
+- **dashes**, **ellipses** (Unit 3): `-` among `–` between spaces, `...` among `…`.
+- **heading-case** (Unit 4): a heading with a capital on each word among headings with a capital only on the first
+  word, or the other way.
+- **note-callers** (Unit 5): a note with another caller (`\f +`, `\x -`) than the other notes.
+- **book-name-forms** (Unit 5): one book named two ways in references (`Lk` and `Luk`).
 - **apostrophes** (Unit 3): a sign between two letters that is not the one the project nearly always uses
   (`ng'ombe` where the project writes `ʼ`).
 - **digit-systems** (Unit 3): digits of another system than most numbers of the project (`۲۷` among `27`).

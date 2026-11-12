@@ -8,7 +8,11 @@ from collections.abc import Callable, Iterable, Iterator
 from functools import lru_cache
 
 from checker import places
-from checker.forms import check_apostrophes, check_digit_systems, check_fractions, check_untranslated
+from checker.forms import (
+    check_apostrophes, check_dashes, check_digit_systems, check_ellipses, check_fractions, check_heading_case,
+    check_note_callers, check_untranslated,
+)
+from checker.verses import check_figures, check_glossary_words, check_repeated_text, check_verse_lengths
 from checker.poetry import (
     check_poetry_chapter_break, check_line_ends, check_poetry_long_lines, check_poetry_numbers,
     check_poetry_two_sentences, check_poetry_verse_inside, is_poetry_line,
@@ -529,6 +533,7 @@ class UsageCounter:
         self.note_references: list[XtReference] = []
         # (book, chapter, verse) -> scripture text of the verse: no notes, no headings ("6-7" fills both verses).
         self.verse_texts: dict[tuple[str, int, int], str] = {}
+        self.verse_ranges: set[tuple[str, int, int]] = set()  # verses written as a range (6-7): the text is shared
         # 4-digit numbers of the text (not introductions): written with / without the thousands separator,
         # each as (book, chapter:verse, number, context).
         self.four_digit: tuple[list[tuple[str, str, str, str]], list[tuple[str, str, str, str]]] = ([], [])
@@ -537,6 +542,7 @@ class UsageCounter:
         # Paragraphs and headings of the checked books in file order, notes left out (poetry checks look at neighbours).
         self.flow: list[Segment] = []
         self.segments: list[Segment] = []  # all segments of the checked books, notes too
+        self.sources: list[tuple[str, str]] = []  # (book, raw file) of the checked books
         # (book, "chapter:verse") -> \nd count and words without \nd in the scripture text of the verse.
         self.nd_places: dict[tuple[str, str], VerseNd] = {}
 
@@ -570,6 +576,8 @@ class UsageCounter:
                 continue
             for number in range(numbers[0], numbers[1] + 1):
                 key = (segment.book, int(chapter), number)
+                if numbers[0] != numbers[1]:
+                    self.verse_ranges.add(key)
                 self.verse_texts[key] = f"{self.verse_texts[key]} {piece}" if key in self.verse_texts else piece
         self._add_divine_name(analysis)
 
@@ -587,6 +595,8 @@ class UsageCounter:
 
     def add_source(self, book: str, content: str, ctx: CheckContext, with_references: bool = True) -> None:
         """Index a book file: its verses and names for every book, its references if it is checked."""
+        if with_references:
+            self.sources.append((book, content))  # raw files of the checked books (glossary, pictures, callers)
         index = index_book(book, content, ctx.settings.reference_format)
         self.verses[book] = index.verses
         for name in index.names:
@@ -1039,6 +1049,48 @@ def check_one_chapter_books(usage: UsageCounter, ctx: CheckContext) -> Iterator[
                       f"{how}: write '{better}'", reference.context)
 
 
+def _name_as_written(name: str, usage: UsageCounter) -> tuple[str, str] | None:
+    """(the book name as written, book code): leading words such as "see" are dropped like in _name_to_book."""
+    words = name.split()
+    while words:
+        written = " ".join(words)
+        if (key := _book_name_key(written)) in usage.book_names:
+            return written, usage.book_names[key]
+        words.pop(0)
+    return None
+
+
+MIN_USUAL_NAME = 20  # the usual name of a book in references is used at least this often
+NAME_RATIO = 10  # and at least this many times more than the rare one
+
+
+def check_book_name_forms(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
+    """One book named two ways in \\xt references ("Lk 3:23" 1345 times, "Luk 3:23" twice): the rare name is listed.
+    Each name may be in \\toc1-3; the project should use one."""
+    fmt = ctx.settings.reference_format
+    places: dict[str, list[tuple[XtReference, str]]] = {}
+    for reference in usage.references:
+        if reference.marker != "xt" or reference.book in PERIPHERAL_BOOKS:
+            continue
+        for part in parse_reference(reference.text.partition("|")[0], fmt)[0]:
+            if part.name and (found := _name_as_written(part.name, usage)):
+                places.setdefault(found[1], []).append((reference, found[0]))
+    for book, items in places.items():
+        counts = Counter(name for _, name in items)
+        if len(counts) < 2:
+            continue
+        usual, usual_count = counts.most_common(1)[0]
+        if usual_count < MIN_USUAL_NAME:
+            continue
+        for reference, name in items:
+            # "Psalm" / "Psalms": one name in two grammatical forms, not two names.
+            same_name = name.startswith(usual) or usual.startswith(name)
+            if name != usual and not same_name and usual_count >= counts[name] * NAME_RATIO:
+                yield Finding(reference.book, reference.ref, WARNING, "book-name-forms", name,
+                              f"'{name}': {usual_count} of {len(items)} references to {book} write '{usual}'",
+                              reference.context)
+
+
 def _compact(numbers: list[int]) -> str:
     return f"{numbers[0]}-{numbers[-1]}" if len(numbers) > 1 else str(numbers[0])
 
@@ -1145,6 +1197,16 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "poetry-numbers": lambda usage, ctx: check_poetry_numbers(usage.poetry_lines, ctx),
     "self-references": check_self_references,
     "one-chapter-books": check_one_chapter_books,
+    "repeated-text": lambda usage, ctx: check_repeated_text(usage.verse_texts, usage.verse_ranges),
+    "verse-lengths": lambda usage, ctx: check_verse_lengths(usage.verse_texts, usage.verse_ranges,
+                                                            ctx.to_original, ctx),
+    "glossary-words": lambda usage, ctx: check_glossary_words(usage.sources, ctx),
+    "figures": lambda usage, ctx: check_figures(usage.sources, ctx.project, ctx),
+    "dashes": lambda usage, ctx: check_dashes(usage.segments, ctx),
+    "ellipses": lambda usage, ctx: check_ellipses(usage.segments, ctx),
+    "heading-case": lambda usage, ctx: check_heading_case(usage.flow, usage.case_refs, ctx),
+    "note-callers": lambda usage, ctx: check_note_callers(usage.sources, ctx),
+    "book-name-forms": check_book_name_forms,
     "untranslated-verses": lambda usage, ctx: check_untranslated(usage.verse_texts, usage.words, ctx),
     "apostrophes": lambda usage, ctx: check_apostrophes(usage.segments, ctx),
     "digit-systems": lambda usage, ctx: check_digit_systems(usage.segments, ctx),

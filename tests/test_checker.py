@@ -308,6 +308,69 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertTrue({"pairs", "ordinals", "normalization", "spelling", "hyphenation", "lists"} <= set(reasons))
         self.assertIn("Wordlist is empty", reasons["spelling"])
 
+    def test_repeated_text(self):
+        from checker.verses import check_repeated_text
+        texts = {("TST", 1, 1): "І сказав він до них слово своє.", ("TST", 1, 2): "І сказав він до них слово своє.",
+                 ("TST", 1, 3): "Він пішов до міста він пішов до міста вночі.",
+                 ("TST", 1, 4): "Отче мій, отче мій, де ти?",                    # a mark between: on purpose
+                 ("TST", 1, 5): "Один текст для двох віршів тут.", ("TST", 1, 6): "Один текст для двох віршів тут."}
+        found = list(check_repeated_text(texts, {("TST", 1, 5), ("TST", 1, 6)}))
+        self.assertEqual([(f.ref, f.item) for f in found], [("1:2", "1:2"), ("1:3", "Він пішов до міста")])
+
+    def test_verse_lengths(self):
+        from unittest import mock
+        from checker import verses
+        base = {("TST", 1, n): 100 for n in range(1, 301)}
+        texts = {key: "а" * 90 for key in base}
+        texts[("TST", 1, 7)] = "а" * 20      # much shorter than 90% of the base
+        texts[("TST", 1, 8)] = "а" * 400     # much longer
+        with mock.patch.object(verses, "read_verse_lengths", return_value=base):
+            found = list(verses.check_verse_lengths(texts, set(), lambda key: key, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in found], [("1:7", "much shorter"), ("1:8", "much longer")])
+
+    def test_glossary_and_figures(self):
+        from checker.verses import check_figures, check_glossary_words
+        sources = [("GLO", "\\id GLO\n\\p \\k Месія\\k* – Помазаник.\n\\p \\k Субота\\k* – день."),
+                   ("MAT", "\\id MAT\n\\c 1\n\\p \\v 1 \\w Месії\\w* і \\w суботу|Субота\\w* і \\w Фарисей\\w*.\n"
+                           "\\v 2 б \\fig Карта|src=\"map.jpg\" size=\"col\" ref=\"1:2\"\\fig*"
+                           "\\fig Без файлу|src=\"\" ref=\"5:9\"\\fig*")]
+        glossary = list(check_glossary_words(sources, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in glossary], [("1:1", "Фарисей")])
+        figures = list(check_figures(sources, None, self.ctx))
+        self.assertEqual([f.item for f in figures], ["no file", "5:9"])
+        self.ctx.skipped = {}
+        self.assertEqual(list(check_figures(sources[:1], None, self.ctx)), [])
+        self.assertIn("no pictures", self.ctx.skipped["figures"])
+
+    def test_dashes_ellipses_callers(self):
+        from checker import forms
+        many = " ".join(f"\\v {n} Слово – слово… і далі." for n in range(1, 25))
+        usage = self._poetry_usage(f"\\id TST\n\\c 1\n\\p {many} \\v 25 Слово - слово... кінець.")
+        self.assertEqual([f.item for f in forms.check_dashes(usage.segments, self.ctx)], ["-"])
+        self.assertEqual([f.item for f in forms.check_ellipses(usage.segments, self.ctx)], ["..."])
+        notes = "".join(f"\\v {n} а\\f + \\fr 1:{n} \\ft б\\f*" for n in range(1, 25))
+        sources = [("TST", f"\\id TST\n\\c 1\n\\p {notes}\\v 25 в\\f a \\fr 1:25 \\ft г\\f*")]
+        found = list(forms.check_note_callers(sources, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in found], [("1:25", "\\f a")])
+
+    def test_heading_case(self):
+        from checker import forms
+        words = "\\p \\v 1 " + " ".join("Тут слово, і там дім, і ще міст." for _ in range(3)) + "\n"
+        heads = "".join(f"\\s1 Слово про дім і міст {n}\n\\p \\v {n} а\n" for n in range(2, 26))
+        usage = self._poetry_usage(f"\\id TST\n\\c 1\n{words}{heads}\\s1 Слово Про Дім І Міст\n\\p \\v 30 а\n")
+        found = list(forms.check_heading_case(usage.flow, usage.case_refs, self.ctx))
+        self.assertEqual([f.item for f in found], ["Слово Про Дім І Міст"])
+
+    def test_book_name_forms(self):
+        from checker.checks import check_book_name_forms
+        usage = UsageCounter()
+        usage.add_source("LUK", "\\id LUK\n\\toc2 Лука\n\\toc3 Лк\n\\c 1\n\\p \\v 1 а", self.ctx)
+        refs = "; ".join("Лк 1:1" for _ in range(20))
+        usage.add_source("ACT", f"\\id ACT\n\\toc3 Дії\n\\c 1\n\\p \\v 1 а\\x - \\xt {refs}\\xt*\\x*"
+                                "\\x - \\xt Лука 1:1\\xt*\\x*", self.ctx)
+        found = list(check_book_name_forms(usage, self.ctx))
+        self.assertEqual([f.item for f in found], ["Лука"])
+
     def test_term_rendering_words(self):
         from checker.terms import rendering_words
         self.assertEqual(rendering_words("земл*, де тече молоко і мед"), 6)
