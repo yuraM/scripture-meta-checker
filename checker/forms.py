@@ -300,3 +300,28 @@ def check_all_caps(segments: list[Segment], ctx: CheckContext) -> Iterator[Findi
         yield _finding(segment, match.start(), len(word), "all-caps", word,
                        f"'{word}' is typed in capitals in \\{segment.style}: type it in small letters and use a marker "
                        f"for capitals (\\sc … \\sc*; \\nd … \\nd* for the divine name).{elsewhere}")
+
+
+# --- marker-capitals: the first word of \pc, \sc, \sig starts with a capital ---
+
+CAPITAL_FIRST_PARAGRAPHS = frozenset({"pc"})  # inscriptions (each line of one)
+CAPITAL_FIRST_SPANS = frozenset({"sc", "sig"})  # small capitals, the signature of a letter
+
+
+def check_marker_capitals(segments: list[Segment], ctx: CheckContext) -> Iterator[Finding]:
+    """The first word inside \\pc (every line of an inscription), \\sc … \\sc* and \\sig … \\sig* starts with a capital
+    letter (user rule 2026-11-12). Scripts without capitals are not checked; all books are, front matter is printed."""
+    for segment in segments:
+        pieces = [(segment.style, 0, len(segment.text))] if segment.style in CAPITAL_FIRST_PARAGRAPHS else []
+        pieces += [(marker, start, end) for start, end, marker in segment.spans if marker in CAPITAL_FIRST_SPANS]
+        for marker, start, end in pieces:
+            match = QUOTE_WORDS_RE.search(segment.text, start, end)
+            if not match:
+                continue
+            word = match.group()
+            first = word[0]
+            if first.lower() == first.upper() or not first.islower():
+                continue
+            better = first.upper() + word[1:]
+            yield _finding(segment, match.start(), len(word), "marker-capitals", word,
+                           f"the first word in \\{marker} must start with a capital letter: write '{better}'")

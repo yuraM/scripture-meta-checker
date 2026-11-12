@@ -270,6 +270,7 @@ wordlist/
 | `ellipses` (opt-in, Unit 3 > Punctuation) | text (not front/back matter: `OTH` has program strings) | — | `…` / `...` / `. . .` not the usual one (≥90% of ≥20) |
 | `heading-case` (opt-in, Unit 4 > Capital letters) | `\s#`/`\ms#` + case statistics | — | per style: headings with ≥2 capitals on words written small everywhere else (Title Case) among Sentence case headings, or the reverse; words after `:` or a dash do not count. Repo projects: 0-2 |
 | `all-caps` (opt-in, Unit 4 > Capital letters) | all segments (not front/back matter) | — | a word of ≥2 cased letters typed all in capitals. **Capitals are made only by markers** (`\nd`, `\sc`, `\sls`; user rule 2026-11-12), so titles, headings and inscriptions (`\pc` MENE, MENE, TEKEL) typed in capitals count too. Not counted: words inside those markers, Roman numerals (Latin and the Cyrillic look-alikes І Х), front/back matter. The message gives the form used elsewhere, if any. Repo projects: 0-28 (YHWH / ЙГВГ in notes, `SENHOR`, `TUHAN` without `\nd`, abbreviations such as BC) |
+| `marker-capitals` (opt-in, Unit 4 > Capital letters) | `\pc` paragraphs (every line of an inscription) and `\sc`, `\sig` spans (`Segment.spans`), all books | — | the first word starts with a small letter (user rule 2026-11-12); scripts without capitals give nothing. Repo projects: 0-5 (`mene, mene, tekel` in DAN 5:25, the second and third `\pc` line of REV 17:5, `\sc a.d.`) |
 | `note-callers` (opt-in, Unit 5 > Footnotes) | raw `\f \fe \x \ex` callers | — | per note marker: `+`, `-` or a letter that is not the usual one (≥90% of ≥20); repo projects: 0 |
 | `book-name-forms` (opt-in, Unit 5 > References) | `\xt` parts (leading words such as "see" dropped) | — | one book named two ways: the rare name when the usual one is used ≥20× and ≥10× more; forms of one name (`Psalm`/`Psalms`) and front/back matter are skipped. Repo projects: 0-2 (`Luk` among 1345 `Lk`) |
 | `untranslated-verses` (opt-in, Unit 2 > Verse text) | verse texts (not front/back matter: tables with English names) | — | ≥50% of ≥20 letters in another script than the project's main one, or ≥70% of ≥5 small-letter words occur only in this verse (names are capitalized). Repo projects: 0-1, both lists of rare words (LEV 11:30 lizards, 2TI 3:3 vices): a safety net |
@@ -321,7 +322,7 @@ book in order, because a quote may span paragraphs and chapters. Design:
   are warnings marked "(in a footnote)".
 
 `unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `divine-name`, `numbers`, `footnotes`, `references`, `untranslated-verses`, `repeated-text`, `verse-lengths`, `glossary-words`, `figures`, `dashes`, `ellipses`,
-`heading-case`, `all-caps`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `self-references`, `one-chapter-books`, `term-renderings`,
+`heading-case`, `all-caps`, `marker-capitals`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `self-references`, `one-chapter-books`, `term-renderings`,
 `poetry-numbers`, `line-ends`, `poetry-two-sentences`, `poetry-long-lines`, `poetry-verse-inside`,
 `poetry-chapter-break`, `parallel-changes`,
 `parallel-differences`, `terms` and `term-lists` are project-level checks (`PROJECT_CHECKS`): they run once after

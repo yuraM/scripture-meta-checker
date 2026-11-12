@@ -367,6 +367,15 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertIn("use a marker for capitals", found[3].message)
         self.assertNotIn("Elsewhere", found[3].message)  # ТЕКЕЛ is written nowhere else
 
+    def test_marker_capitals(self):
+        from checker import forms
+        usfm = ("\\id TST\n\\c 1\n\\p \\v 1 Написано:\n\\pc Вавилон великий,\n\\pc мати блудниць\n"
+                "\\p \\v 2 Близько \\sc р. х.\\sc* і \\sc Господь\\sc*. \\sig павло\\sig*")
+        usage = self._poetry_usage(usfm)
+        found = list(forms.check_marker_capitals(usage.segments, self.ctx))
+        self.assertEqual([(f.item, f.message.split(": write ")[1]) for f in found],
+                         [("мати", "'Мати'"), ("р", "'Р'"), ("павло", "'Павло'")])
+
     def test_heading_case(self):
         from checker import forms
         words = "\\p \\v 1 " + " ".join("Тут слово, і там дім, і ще міст." for _ in range(3)) + "\n"
