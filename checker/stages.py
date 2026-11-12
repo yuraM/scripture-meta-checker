@@ -18,7 +18,8 @@ STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Unit 5. References and terms",
      ("references", "footnotes", "terms", "parallel-changes", "parallel-differences")),
     ("Unit 6. Review lists", ("variants", "name-case", "styled-words", "divine-name",
-                             "poetry-numbers", "poetry-two-sentences", "unused")),
+                             "poetry-numbers", "poetry-line-ends", "poetry-two-sentences", "poetry-long-lines",
+                             "poetry-verse-inside", "poetry-chapter-break", "unused")),
 )
 # Groups inside a unit (unit number, title, checks in the order to fix their problems): the window shows them
 # folded, the reports under their own heading. Their checks are also in STAGES.
@@ -28,7 +29,8 @@ GROUPS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
     (5, "Parallel passages", ("parallel-changes", "parallel-differences")),
     (6, "Names", ("variants", "name-case")),
     (6, "Divine name and styles", ("styled-words", "divine-name")),
-    (6, "Poetry", ("poetry-numbers", "poetry-two-sentences")),
+    (6, "Poetry", ("poetry-numbers", "poetry-line-ends", "poetry-two-sentences", "poetry-long-lines",
+                   "poetry-verse-inside", "poetry-chapter-break")),
 )
 # Stages whose errors are named at the top of the report: fix them before the others.
 FIRST_STAGES = 2

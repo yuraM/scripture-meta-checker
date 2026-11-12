@@ -44,6 +44,10 @@ TEXT_CHECKS = [*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS]
 CHECK_DESCRIPTIONS = {
     "poetry-numbers": "A number written with digits (12, or the digits of another script) in a poetry line "
                       "\\q, \\q1, \\q2. Poetry usually writes numbers in words. References (40:8) are not counted.",
+    "poetry-line-ends": "A poetry line ends with a comma or semicolon, and the next line starts with a capital letter of a word that is written small everywhere else: a full stop is missing, or the capital is wrong.",
+    "poetry-long-lines": "A very long poetry line (longer than 99% of the poetry lines of this project and twice the usual length): maybe it should be two lines.",
+    "poetry-verse-inside": "A verse number inside a poetry line. Poetry lines usually start with the verse.",
+    "poetry-chapter-break": "Poetry goes on into the next chapter with no \b (stanza break) at the end of the chapter and no heading. Usually a new chapter is a new stanza: then add \b.",
     "poetry-two-sentences": "A long poetry line (longer than 95% of the poetry lines of this project) with a full "
                             "stop, ! or ? inside it: maybe it should be two lines. Two short sentences in one line "
                             "are normal.",

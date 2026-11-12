@@ -8,7 +8,10 @@ from collections.abc import Callable, Iterable, Iterator
 from functools import lru_cache
 
 from checker import places
-from checker.poetry import check_poetry_numbers, check_poetry_two_sentences, is_poetry_line
+from checker.poetry import (
+    check_poetry_chapter_break, check_poetry_line_ends, check_poetry_long_lines, check_poetry_numbers,
+    check_poetry_two_sentences, check_poetry_verse_inside, is_poetry_line,
+)
 from checker.approvals import check_approvals
 from checker.divine_name import VerseNd, check_divine_name
 from checker.footnotes import Note, check_footnotes, read_notes
@@ -530,6 +533,8 @@ class UsageCounter:
         self.four_digit: tuple[list[tuple[str, str, str, str]], list[tuple[str, str, str, str]]] = ([], [])
         self.footnotes: list[Note] = []  # footnotes of the checked books, read from the raw files
         self.poetry_lines: list[Analysis] = []  # \q, \q1, \q2 … lines of the checked books (checker/poetry.py)
+        # Paragraphs and headings of the checked books in file order, notes left out (poetry checks look at neighbours).
+        self.flow: list[Segment] = []
         # (book, "chapter:verse") -> \nd count and words without \nd in the scripture text of the verse.
         self.nd_places: dict[tuple[str, str], VerseNd] = {}
 
@@ -632,6 +637,8 @@ class UsageCounter:
         self._add_verse_texts(analysis)
         if is_poetry_line(analysis):
             self.poetry_lines.append(analysis)
+        if not segment.in_note:
+            self.flow.append(segment)
         self.characters.update(cluster for _, cluster in graphemes(text))
         for index, run in enumerate(runs):
             if run.is_word:
@@ -1061,7 +1068,11 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "terms": check_terms,
     "term-lists": check_term_lists,
     "poetry-numbers": lambda usage, ctx: check_poetry_numbers(usage.poetry_lines, ctx),
+    "poetry-line-ends": lambda usage, ctx: check_poetry_line_ends(usage.flow, usage.case_refs, ctx),
     "poetry-two-sentences": lambda usage, ctx: check_poetry_two_sentences(usage.poetry_lines, ctx),
+    "poetry-long-lines": lambda usage, ctx: check_poetry_long_lines(usage.poetry_lines, ctx),
+    "poetry-verse-inside": lambda usage, ctx: check_poetry_verse_inside(usage.poetry_lines, ctx),
+    "poetry-chapter-break": lambda usage, ctx: check_poetry_chapter_break(usage.flow, ctx),
 }
 # Checks that need the Biblical Terms files (read only when one of them runs).
 TERM_CHECKS = frozenset({"terms", "term-lists"})

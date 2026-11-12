@@ -217,6 +217,41 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         few = self._poetry_usage(f"\\id TST\n\\c 1\n\\q1 \\v 1 {long_line}")  # too few lines to know "long"
         self.assertEqual(list(poetry.check_poetry_two_sentences(few.poetry_lines, self.ctx)), [])
 
+    def test_poetry_neighbour_checks(self):
+        from checker import poetry
+        usfm = ("\\id TST\n\\c 1\n\\p \\v 1 Тут слово, і там слово, і ще слово.\n"
+                "\\q1 \\v 2 Перший рядок,\n\\q2 Слово з великої.\n"      # comma, then a word written small elsewhere
+                "\\q1 Ще рядок,\n\\q2 Петро прийшов.\n"                   # a name: never written small
+                "\\q1 Рядок перед віршем \\v 3 і далі.\n"                 # verse 3 inside the line
+                "\\c 2\n\\q1 \\v 1 Друга глава без розриву.\n"           # no \b at the end of chapter 1
+                "\\b\n\\c 3\n\\q1 \\v 1 Третя глава після розриву.\n")
+        usage = self._poetry_usage(usfm)
+        ends = list(poetry.check_poetry_line_ends(usage.flow, usage.case_refs, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in ends], [("1:2", "Слово")])
+        inside = list(poetry.check_poetry_verse_inside(usage.poetry_lines, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in inside], [("1:3", "1:3")])
+        breaks = list(poetry.check_poetry_chapter_break(usage.flow, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in breaks], [("2:1", "1-2")])
+        self.assertIn("\\b (stanza break)", breaks[0].message)
+
+    def test_poetry_line_ends_project_capitals(self):
+        from checker import poetry
+        # Every line after a comma starts with a capital: the project does it on purpose, only a note.
+        usfm = "\\id TST\n\\c 1\n\\p \\v 1 Тут слово, слово, слово.\n" + "".join(
+            f"\\q1 \\v {n} Рядок,\n\\q2 Слово далі.\n" for n in range(2, 25))
+        usage = self._poetry_usage(usfm)
+        self.assertEqual(list(poetry.check_poetry_line_ends(usage.flow, usage.case_refs, self.ctx)), [])
+        self.assertIn("on purpose", self.ctx.notes["poetry-line-ends"])
+
+    def test_poetry_long_lines(self):
+        from checker import poetry
+        usfm = "\\id TST\n\\c 1\n" + "".join(f"\\q1 \\v {n} Короткий рядок поезії номер {n},\n"
+                                            for n in range(1, 150))
+        usfm += "\\q1 \\v 150 " + "дуже довгий рядок без кінця речення " * 3 + "\n"
+        usage = self._poetry_usage(usfm)
+        found = list(poetry.check_poetry_long_lines(usage.poetry_lines, self.ctx))
+        self.assertEqual([f.ref for f in found], ["1:150"])
+
     def test_spelling_leaves_mixed_case_to_its_check(self):
         text = "\\p Бет-Ель ен-Мішпату слово"
         self.assertEqual([f.item for f in self.run_check("spelling", text)], ["Бет-Ель", "ен-Мішпату"])

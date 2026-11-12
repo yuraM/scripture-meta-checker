@@ -12,9 +12,15 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
   selects all its checks (a dash = only some are selected). The report shows each group with its own heading.
 - **poetry-numbers** (Unit 6, Poetry 1): a number written with digits in a poetry line `\q1`, `\q2`, for example
   `40,000` in a song. Poetry usually writes numbers in words. References (`40:8`) are not shown.
-- **poetry-two-sentences** (Unit 6, Poetry 2): a long poetry line with a full stop, `!` or `?` inside it, for example
+- **poetry-line-ends** (Unit 6, Poetry 2): a poetry line ends with a comma, and the next line starts with a
+  capital letter of a word that is written small everywhere else. Maybe a full stop is missing.
+- **poetry-two-sentences** (Unit 6, Poetry 3): a long poetry line with a full stop, `!` or `?` inside it, for example
   "…from the ground. You will eat plants…". Maybe the line should be two lines. "Long" is decided by the project:
   longer than 95% of its poetry lines.
+- **poetry-long-lines** (Unit 6, Poetry 4): a very long poetry line, maybe two lines.
+- **poetry-verse-inside** (Unit 6, Poetry 5): a verse number inside a poetry line.
+- **poetry-chapter-break** (Unit 6, Poetry 6): poetry goes on into the next chapter with no `\b` (stanza
+  break) at the end of the chapter and no heading.
 
 ## 1.0.2 (2026-11-12)
 

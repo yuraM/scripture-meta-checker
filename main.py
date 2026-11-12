@@ -41,7 +41,11 @@ CHECKS = [
     "styled-words",          # word usually in \nd but not here (or the reverse)
     "divine-name",           # the divine name without \nd where translations have LORD in \nd
     "poetry-numbers",        # digits in poetry lines \q1 \q2 (poetry usually writes numbers in words)
+    "poetry-line-ends",      # poetry line ends with "," but the next starts with a capital (full stop missing?)
     "poetry-two-sentences",  # long poetry line with a sentence end inside: maybe two lines
+    "poetry-long-lines",     # very long poetry line
+    "poetry-verse-inside",   # verse number inside a poetry line
+    "poetry-chapter-break",  # poetry goes on into the next chapter without 
     "references",            # references: chapters/verses that do not exist, marks not from Settings.xml
     "footnotes",             # footnotes built differently from similar ones (Lit.: \fq vs \fqa, missing full stop)
     "parallel-changes",      # ParallelPassageStatus.xml: approved parallel verses that were changed later
