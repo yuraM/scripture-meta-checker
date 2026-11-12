@@ -30,8 +30,8 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
   word, or the other way.
 - **all-caps** (Unit 4): a word typed all in capitals (`SENHOR`, `МЕНЕ, МЕНЕ, ТЕКЕЛ`, a heading in
   capitals). Capitals are made only by markers (`\nd`, `\sc`); Roman numerals are not shown.
-- **marker-capitals** (Unit 4): the first word inside `\pc` (every line of an inscription), `\sc` and `\sig`
-  must start with a capital letter (`mene, mene, tekel` -> `Mene, mene, tekel`).
+- **marker-capitals** (Unit 4): the first word of a `\pc` paragraph (every line of an inscription) must
+  start with a capital letter (`mene, mene, tekel` -> `Mene, mene, tekel`).
 - **note-callers** (Unit 5): a note with another caller (`\f +`, `\x -`) than the other notes.
 - **book-name-forms** (Unit 5): one book named two ways in references (`Lk` and `Luk`).
 - **apostrophes** (Unit 3): a sign between two letters that is not the one the project nearly always uses

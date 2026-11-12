@@ -42,7 +42,7 @@ TEXT_CHECKS = [*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS]
 
 # Shown at the top of each report. Keep the English simple: many readers know little English.
 CHECK_DESCRIPTIONS = {
-    "marker-capitals": "The first word inside \\pc (every line of an inscription), \\sc and \\sig must start with a capital letter.",
+    "marker-capitals": "The first word of a \\pc paragraph (every line of an inscription) must start with a capital letter.",
     "all-caps": "A word typed all in capitals (SENHOR, a heading or an inscription in capitals). Capitals are made only by markers (\\nd for the divine name, \\sc), never typed. Roman numerals are not counted.",
     "repeated-text": "A verse with the same words as the verse before it, or a group of words written twice in a row. Verse ranges (\\v 6-7) are not counted.",
     "verse-lengths": "A verse 3 times shorter or longer than usual, compared with the length of the same verse in an English translation (only lengths are kept in the program). A part may be missing or added, or the verse is numbered another way.",
