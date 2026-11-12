@@ -266,20 +266,18 @@ def check_note_callers(sources: list[tuple[str, str]], ctx: CheckContext) -> Ite
         yield from _rare(places, lambda place: place[3], "note-callers", "caller", message)
 
 
-# --- all-caps: a word written in capitals that the project writes otherwise ---
+# --- all-caps: a word typed in capitals; capitals come only from markers (\nd, \sc) ---
 
-SMALL_CAPS_STYLES = frozenset({"nd", "sc", "sls"})  # printed in (small) capitals anyway
-NOT_TEXT_CAPS_RE = re.compile(r"(mt\d*|toc\d|h|imt\d*|is\d*|ms\d*|mr|s\d*|sp|cl|qa|r|sr|d|iot|pc)$")
+SMALL_CAPS_STYLES = frozenset({"nd", "sc", "sls"})  # markers that print a word in (small) capitals
 ROMAN_NUMERAL_LETTERS = frozenset("IVXLCDMІХ")  # Latin, and the Cyrillic І Х that look the same
-MIN_OTHER_FORMS = 3  # the word is written another way at least this often
-MAX_CAPS_SHARE = 0.1  # and in capitals in at most this part of its places
 
 
 def check_all_caps(segments: list[Segment], ctx: CheckContext) -> Iterator[Finding]:
-    """A word written all in capitals ("SENHOR") that the project writes otherwise nearly everywhere: Caps Lock, or
-    the divine name without \\nd. Not counted: small-caps styles (\\nd, \\sc), titles and headings, inscriptions (\\pc:
-    "MENE, MENE"), Roman numerals (II, IV), words of one letter, front/back matter."""
-    capitals: dict[str, list[tuple[Segment, re.Match[str]]]] = {}
+    """A word typed all in capitals ("SENHOR", "МЕНЕ, МЕНЕ, ТЕКЕЛ", a heading in capitals): capitals are made only by
+    markers (\\nd, \\sc), never typed (user rule 2026-11-12), also in headings, titles and inscriptions (\\pc). Not
+    counted: words inside \\nd \\sc \\sls, Roman numerals (II, IV), words of one letter, front/back matter. The message
+    names the form the project uses elsewhere, if there is one."""
+    capitals: list[tuple[Segment, re.Match[str]]] = []
     forms: dict[str, Counter] = {}
     for segment in segments:
         if segment.book in PERIPHERAL_BOOKS:
@@ -289,21 +287,18 @@ def check_all_caps(segments: list[Segment], ctx: CheckContext) -> Iterator[Findi
             cased = [ch for ch in word if ch.lower() != ch.upper()]
             if len(cased) < 2:
                 continue
-            if word.isupper():
-                if (segment.styles_at(match.start()) & SMALL_CAPS_STYLES or NOT_TEXT_CAPS_RE.match(segment.style)
-                        or set(word) <= ROMAN_NUMERAL_LETTERS):
-                    continue
-                capitals.setdefault(word.lower(), []).append((segment, match))
-            else:
+            if not word.isupper():
                 forms.setdefault(word.lower(), Counter())[word] += 1
-    for key, places in capitals.items():
-        other = forms.get(key, Counter())
-        total = sum(other.values())
-        if total < MIN_OTHER_FORMS or len(places) > (len(places) + total) * MAX_CAPS_SHARE:
-            continue
-        usual = other.most_common(1)[0][0]
-        for segment, match in places:
-            word = match.group()
-            yield _finding(segment, match.start(), len(word), "all-caps", word,
-                           f"'{word}' is written in capitals, but {total} times elsewhere as '{usual}': write "
-                           f"'{usual}' (if it is the divine name, mark it \\nd {usual}\\nd*)")
+            elif not segment.styles_at(match.start()) & SMALL_CAPS_STYLES and not set(word) <= ROMAN_NUMERAL_LETTERS:
+                capitals.append((segment, match))
+    for segment, match in capitals:
+        word = match.group()
+        other = forms.get(word.lower())
+        if other:
+            usual = other.most_common(1)[0][0]
+            advice = (f"elsewhere it is written '{usual}' ({sum(other.values())}×): write '{usual}', and for capitals "
+                      f"use a marker (\\nd {usual}\\nd* for the divine name, \\sc … \\sc*)")
+        else:
+            advice = "type it in small letters and use a marker for capitals (\\sc … \\sc*, \\nd … \\nd* for the divine name)"
+        yield _finding(segment, match.start(), len(word), "all-caps", word,
+                       f"'{word}' is typed in capitals in \\{segment.style}: {advice}")

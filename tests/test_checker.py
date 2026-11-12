@@ -360,8 +360,12 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
                 "\\pc МЕНЕ, МЕНЕ, ТЕКЕЛ\n\\s1 ГОСПОДЬ ЦАР\n\\p \\v 3 мене, мене, мене.")
         usage = self._poetry_usage(usfm)
         found = list(forms.check_all_caps(usage.segments, self.ctx))
-        self.assertEqual([(f.ref, f.item) for f in found], [("1:2", "ГОСПОДЬ")])
+        # Capitals come only from markers: inscriptions (\pc) and headings typed in capitals count too;
+        # \nd and Roman numerals do not.
+        self.assertEqual([f.item for f in found], ["ГОСПОДЬ", "МЕНЕ", "МЕНЕ", "ТЕКЕЛ", "ГОСПОДЬ", "ЦАР"])
         self.assertIn("\\nd Господь\\nd*", found[0].message)
+        self.assertIn("write 'мене'", found[1].message)
+        self.assertIn("use a marker for capitals", found[3].message)
 
     def test_heading_case(self):
         from checker import forms

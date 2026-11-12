@@ -22,7 +22,7 @@ CHECKS = [
     "capitalization",        # capital after sentence end, abbreviations
     "spelling",              # SpellingStatus.xml
     "heading-case",          # heading in Title Case among Sentence case headings (or the reverse)
-    "all-caps",              # SENHOR in capitals where the project writes Senhor (Caps Lock, 
+    "all-caps",              # word typed in capitals (capitals only by markers \nd \sc)
 d missing)
     "quotes",                # quotation marks: unclosed, wrong level, mismatched
     "pairs",                 # Pairs: ( ) [ ] { } unclosed or mismatched
