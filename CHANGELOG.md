@@ -2,7 +2,7 @@
 
 Changes of the Scripture checker by release. Releases: https://github.com/yuraM/scripture-meta-checker/releases
 
-## 1.1 (2026-11-12)
+## 1.0.2 (2026-11-12)
 
 ### What's new
 
