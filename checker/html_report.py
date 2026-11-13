@@ -285,14 +285,18 @@ UNDO_ALL = r"""<p><button id="undo-all" type="button" title="Problems marked Acc
   function accepted(check){
     try { return JSON.parse(localStorage.getItem('accepted counts ' + run + ' ' + check) || 'null'); } catch (e) { return null; }
   }
+  // After "Undo all Accept" the places this report left out are still not in it: they come back in the next run.
+  function cleared(){ try { return localStorage.getItem('accepted cleared ' + run) === '1'; } catch (e) { return false; } }
   function update(){
     const total = {error: 0, warning: 0};
+    const undone = cleared();
     document.querySelectorAll('[data-count]').forEach(cell => {
       const now = accepted(cell.dataset.check) || {error: 0, warning: 0, problems: 0};
       const base = +cell.dataset.base, kind = cell.dataset.count;
       if (kind === 'accepted') {
         const places = base + now.error + now.warning;
-        cell.textContent = places ? `+${places} accepted` : '';
+        cell.textContent = undone ? (base ? `(${base} come back in the next run)` : '')
+                                  : (places ? `+${places} accepted` : '');
         return;
       }
       const value = base - (now[kind] || 0);
@@ -315,10 +319,14 @@ UNDO_ALL = r"""<p><button id="undo-all" type="button" title="Problems marked Acc
     try {  // the check pages remember their Accept clicks for the look only
       Object.keys(localStorage).filter(k => k.startsWith('accepted ' + run + ' ') ||
         k.startsWith('accepted counts ' + run + ' ')).forEach(k => localStorage.removeItem(k));
+      localStorage.setItem('accepted cleared ' + run, '1');
     } catch (e) {}
     update();
-    info.textContent = 'Done. Run the checks again to see the problems.';
+    info.textContent = 'Done. Run the checks again: the accepted problems come back in the new report.';
+    const hidden = document.getElementById('accepted-hidden');
+    if (hidden) hidden.textContent = 'The places you accepted come back in the next run (this report was made without them).';
   });
+  if (cleared()) info.textContent = 'Accept was undone for all: the accepted problems come back in the next run.';
 })();
 </script>"""
 
@@ -406,7 +414,7 @@ def write_index(report_dir: Path, project: str, results: list[CheckResult], loca
     accepted = sum(r.accepted for r in results)
     since = (f"<p class=\"muted\">New and Fixed: compared with the run of {html.escape(previous)} "
              "(only the checks and books of both runs).</p>\n" if compared else "")
-    hidden = (f"<p class=\"muted\">{accepted} places you accepted earlier are hidden "
+    hidden = (f"<p class=\"muted\" id=\"accepted-hidden\">{accepted} places you accepted earlier are hidden "
               "(to show them again: Undo all Accept on the first page of the report, or the Accepted button in the window).</p>\n" if accepted else "")
     body = (f"<h1>{html.escape(project)}</h1>\n"
             f"<p class=\"muted\">Checked {datetime.now():%Y-%m-%d %H:%M}. "
