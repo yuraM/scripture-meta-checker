@@ -302,30 +302,36 @@ def check_all_caps(segments: list[Segment], ctx: CheckContext) -> Iterator[Findi
                        f"for capitals (\\sc … \\sc*; \\nd … \\nd* for the divine name).{elsewhere}")
 
 
-# --- marker-capitals: the first word of some paragraph markers starts with a capital ---
+# --- marker-capitals: the first word of some markers starts with a capital ---
 
-# Paragraph markers whose first word starts with a capital (user rule 2026-11-12: paragraphs only, for now; character
-# markers such as \sc and \sig are not checked): \pc, inscriptions, every line of one.
+# Paragraph markers whose first word starts with a capital: \pc, inscriptions, every line of one.
 CAPITAL_FIRST_PARAGRAPHS = frozenset({"pc"})
+# Character markers whose text starts with a capital (user decision 2026-11-13): \sig, the signature of the author of
+# a letter ("\v 21 \sig Salam dariku…\sig*"). Not \sc: small capitals may hold an abbreviation written small.
+CAPITAL_FIRST_SPANS = frozenset({"sig"})
 
 
 def check_marker_capitals(segments: list[Segment], ctx: CheckContext) -> Iterator[Finding]:
-    """The first word of a \\pc paragraph (every line of an inscription) starts with a capital letter. Scripts without
-    capitals are not checked; all books are, front matter is printed."""
+    """The first word of a \\pc paragraph (every line of an inscription) and of the text in \\sig … \\sig* starts with a
+    capital letter. Scripts without capitals are not checked; all books are, front matter is printed."""
     for segment in segments:
-        if segment.in_note or segment.style not in CAPITAL_FIRST_PARAGRAPHS:
+        if segment.in_note:
             continue
-        match = QUOTE_WORDS_RE.search(segment.text)
-        if not match:
-            continue
-        word = match.group()
-        first = word[0]
-        if first.lower() == first.upper() or not first.islower():
-            continue
-        better = first.upper() + word[1:]
-        yield _finding(segment, match.start(), len(word), "marker-capitals", word,
-                       f"the first word of the paragraph \\{segment.style} must start with a capital letter: "
-                       f"write '{better}'")
+        pieces = [(f"the paragraph \\{segment.style}", 0, len(segment.text))] \
+            if segment.style in CAPITAL_FIRST_PARAGRAPHS else []
+        pieces += [(f"\\{marker} … \\{marker}*", start, end) for start, end, marker in segment.spans
+                   if marker in CAPITAL_FIRST_SPANS]
+        for where, start, end in pieces:
+            match = QUOTE_WORDS_RE.search(segment.text, start, end)
+            if not match:
+                continue
+            word = match.group()
+            first = word[0]
+            if first.lower() == first.upper() or not first.islower():
+                continue
+            better = first.upper() + word[1:]
+            yield _finding(segment, match.start(), len(word), "marker-capitals", word,
+                           f"the first word of {where} must start with a capital letter: write '{better}'")
 
 
 # --- sentence-numbers: a sentence or the words of a speaker start with a number in digits ---

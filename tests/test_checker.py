@@ -415,8 +415,9 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
                 "\\p \\v 2 Близько \\sc р. х.\\sc* і \\sc Господь\\sc*. \\sig павло\\sig*")
         usage = self._poetry_usage(usfm)
         found = list(forms.check_marker_capitals(usage.segments, self.ctx))
-        # Paragraphs only: \sc and \sig are character markers and are not checked.
-        self.assertEqual([(f.item, f.message.split(": write ")[1]) for f in found], [("мати", "'Мати'")])
+        # \pc lines and the text of \sig; not \sc (small capitals may hold an abbreviation written small).
+        self.assertEqual([(f.item, f.message.split(": write ")[1]) for f in found],
+                         [("мати", "'Мати'"), ("павло", "'Павло'")])
 
     def test_heading_case(self):
         from checker import forms

@@ -6,6 +6,7 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
+- **marker-capitals** also checks the signature of a letter (\sig ... \sig*): its first word starts with a capital letter.
 - **New checks m-after-heading and duplicate-footnotes:** \m right after a heading (change it to \p); a
   footnote with the same text as a note shortly before it, without \cat dup\cat* (typesetting removes the second
   note when both are on one page).
