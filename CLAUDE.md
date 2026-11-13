@@ -109,7 +109,7 @@ checks and shows a dash when only some are selected. Groups now (2026-11-12, use
 Unit 1 Wordlist and inventories, Biblical terms lists; Unit 2 Markers and titles, Verse text, Invisible characters;
 Unit 3 Characters, Punctuation, Quotes and brackets, Numbers and spaces; Unit 4 Spelling and word breaks,
 Capital letters; Unit 5 References, Footnotes, Parallel passages; Unit 6 Names, Divine name and styles,
-Poetry and lists. Checks without a partner stay single (repeated-words, ordinals, terms, unused). Select all / Clear all (under
+Poetry and lists. A check without a partner is a group of one (user wish 2026-11-13: single check boxes looked out of place): Repeated words, Ordinal numbers, Biblical terms, Unused list entries; a group of one has no numbers and no "fix in this order". Select all / Clear all (under
 the units, above Run; user wish); the progress bar is in the Run row, so the window is about 800 px high with a
 project (user wish: fit small screens). Nothing is
 selected when the window opens and Run is disabled until a check is ticked; the choice stays while the window is open

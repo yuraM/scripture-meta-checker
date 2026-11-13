@@ -136,7 +136,8 @@ class CheckerWindow:
                     fold = self._fold(box, group, group_names)
                     fold.grid(row=line, column=0, sticky="ew")
                     for step, check in enumerate(group_names, start=1):
-                        self._check_button(fold.body, check, f"{step}. {check}").grid(row=step, column=0, sticky="w")
+                        text = f"{step}. {check}" if len(group_names) > 1 else check
+                        self._check_button(fold.body, check, text).grid(row=step, column=0, sticky="w")
                 else:
                     continue
                 line += 1
@@ -571,7 +572,8 @@ class _Fold(ttk.Frame):
         self.box.grid(row=0, column=1, sticky="e")
         _Tooltip(self.box, "Select or clear all checks of this list")
         self.body = ttk.Frame(self, padding=(12, 0, 0, 2))
-        _Tooltip(self.toggle, f"{title}: fix the problems in this order, from 1 down")
+        _Tooltip(self.toggle, f"{title}: fix the problems in this order, from 1 down" if len(names) > 1
+                 else f"{title}: click to see the check")
         self.open = False
         self.chosen = 0
 

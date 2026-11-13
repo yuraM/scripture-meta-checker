@@ -18,6 +18,7 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 - **"!" instead of 0:** when a check has nothing to check with (a file of the project is missing or empty, or the
   list in Paratext is empty, for example the Ordinal list or the quotation marks), the report shows a red **!** and
   the reason, not 0 problems.
+- **Every check in a group:** repeated-words, ordinals, terms and unused are now folded groups too (Repeated words, Ordinal numbers, Biblical terms, Unused list entries), so all units look the same.
 - **Groups of checks:** in the window, checks that belong together are a folded group inside their unit, for
   example Characters, Punctuation, Numbers and spaces, References, Poetry. Click the name of a
   group to see its checks; they are numbered in the order to fix the problems. The box on the right of the group

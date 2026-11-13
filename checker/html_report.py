@@ -297,9 +297,11 @@ def _index_rows(results: list[CheckResult], compared: bool = False) -> str:
         if group_of(r.name) != group:
             group = group_of(r.name)
             if group:
-                rows.append(f'<tr class="group"><th colspan="{width}">{html.escape(group)}: fix in this order</th></tr>')
+                several = len(next(checks for _, title, checks in GROUPS if title == group)) > 1
+                order = ": fix in this order" if several else ""
+                rows.append(f'<tr class="group"><th colspan="{width}">{html.escape(group)}{order}</th></tr>')
         step = next((f"{checks.index(r.name) + 1}. " for _, title, checks in GROUPS
-                     if title == group and r.name in checks), "")
+                     if title == group and r.name in checks and len(checks) > 1), "")
         rows.append(f'<tr><td>{step}<a href="{HTML_FOLDER}/{html.escape(r.name)}.html">{html.escape(r.name)}</a></td>'
                     f'{_counts(r, compared)}<td><a class="muted" href="{TXT_FOLDER}/{html.escape(r.name)}.txt">txt</a></td></tr>')
     return "\n".join(rows)

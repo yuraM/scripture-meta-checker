@@ -42,13 +42,18 @@ GROUPS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
     (4, "Spelling and word breaks", ("spelling", "hyphenation")),
     (4, "Capital letters", ("mixed-capitalization", "capitalization", "heading-case", "all-caps",
                                          "marker-capitals")),
+    # A check without partners is a group of one too: every unit looks the same (user wish 2026-11-13).
+    (4, "Repeated words", ("repeated-words",)),
+    (4, "Ordinal numbers", ("ordinals",)),
     (5, "References", ("references", "self-references", "one-chapter-books", "book-name-forms")),
     (5, "Footnotes", ("footnotes", "footnote-quotes", "note-callers")),
+    (5, "Biblical terms", ("terms",)),
     (5, "Parallel passages", ("parallel-changes", "parallel-differences")),
     (6, "Names", ("variants", "name-case")),
     (6, "Divine name and styles", ("styled-words", "divine-name")),
     (6, "Poetry and lists", ("poetry-numbers", "line-ends", "poetry-two-sentences", "poetry-long-lines",
                    "poetry-verse-inside", "poetry-chapter-break")),
+    (6, "Unused list entries", ("unused",)),
 )
 
 # Stages whose errors are named at the top of the report: fix them before the others.
