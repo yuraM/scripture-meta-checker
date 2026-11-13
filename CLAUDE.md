@@ -605,7 +605,7 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
   problem found later in a new place is shown again. Accepted places are left out of the next reports and the exit
   code (the note says how many). The page remembers its clicks in localStorage only for the look. The window button
   **Accepted (N)** opens a list per check with **Clear** and **Clear all** (with a question; user wish: someone may
-  accept too much).
+  accept too much). `index.html` has a button **Undo all Accept** (user wish 2026-11-13): after a question it opens `…accept?run=…&clear=all`, which empties `accepted.json` (only for a real run folder), and forgets the page marks.
 
 ## Environment notes (Windows)
 

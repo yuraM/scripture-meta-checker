@@ -1428,6 +1428,11 @@ class HistoryTest(unittest.TestCase):
             self.assertEqual(accepted_counts(report_dir), {"spelling": 3})
             clear_accepted(report_dir)
             self.assertFalse((report_dir / "accepted.json").exists())
+            # "Undo all Accept" of index.html: one link clears the whole list.
+            accept(link)
+            self.assertEqual(accept(f"scripturechecker:accept?run={quote(str(run))}&clear=all"), "")
+            self.assertFalse((report_dir / "accepted.json").exists())
+            self.assertIn('id="undo-all"', (third / "index.html").read_text(encoding="utf-8"))
 
 
 class DivineNameTest(unittest.TestCase):

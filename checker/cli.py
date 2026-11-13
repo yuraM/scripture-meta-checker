@@ -514,7 +514,7 @@ def write_reports(project: Path, findings: list[Finding], checks: Sequence[str],
     notes = dict(notes or {})
     for name, count in accepted.items():
         hidden = (f"{count} places you accepted earlier are hidden "
-                  "(to show them again: the Accepted button in the window).")
+                  "(to show them again: Undo all Accept on the first page of the report, or the Accepted button in the window).")
         notes[name] = f"{notes[name]}\n{hidden}" if notes.get(name) else hidden
     txt_dir = report_dir / TXT_FOLDER
     txt_dir.mkdir(parents=True, exist_ok=True)

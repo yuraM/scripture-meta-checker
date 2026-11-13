@@ -7,7 +7,7 @@ and is gone now. Only checks and books of both runs are compared.
 
 Accepted findings are kept in `accepted.json` of the report folder (the parent of the run folders), so they stay
 accepted in later runs; they are hidden from the reports. The HTML report accepts a problem with a link
-`scripturechecker:accept?run=...&check=...&severity=...&message=...` (`&undo=1` takes it back): Windows starts this
+`scripturechecker:accept?run=...&check=...&severity=...&message=...` (`&undo=1` takes it back; `&clear=all`, the button "Undo all Accept" of index.html, clears the list): Windows starts this
 program with the link (the same URL protocol as the links to Paratext). The window can clear the list.
 """
 from __future__ import annotations
@@ -197,7 +197,10 @@ def accept(url: str) -> str:
     data = read_run_data(run) if value("run") and RUN_FOLDER_RE.match(run.name) else None
     if data is None:
         return f"The report folder was not found: {run}. Was it moved or deleted?"
-    keys = {key for key in data.findings if key[0] == check and key[3] == severity and key[4] == message}
+    if value("clear") == "all":  # the button "Undo all Accept" of index.html
+        clear_accepted(run.parent)
+        return ""
+    keys ={key for key in data.findings if key[0] == check and key[3] == severity and key[4] == message}
     if not keys:
         return f"This problem is not in the report of {run.name}."
     with _Lock(run.parent):

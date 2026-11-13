@@ -247,6 +247,34 @@ render();
 """
 
 
+# index.html: a button that takes back every Accept of the project (checker/history.py: accept?...&clear=all).
+# RUN_PATH is replaced by the run folder; opened from the disk, the page uses its own folder (it may have moved).
+UNDO_ALL = r"""<p><button id="undo-all" type="button" title="Problems marked Accept come back in the next reports">Undo all Accept</button>
+<span class="muted" id="undo-info">Shows again all problems you marked Accept (all checks), in the next reports.</span></p>
+<script>
+(function(){
+  const button = document.getElementById('undo-all'), info = document.getElementById('undo-info');
+  function runFolder(){
+    if (location.protocol !== 'file:') return RUN_PATH;
+    const url = new URL('.', location.href);
+    let path = decodeURIComponent(url.pathname).replace(/\/$/, '');
+    if (/^\/[A-Za-z]:/.test(path)) path = path.slice(1);
+    if (url.host) path = '//' + url.host + path;
+    return path.replace(/\//g, '\\');
+  }
+  const run = runFolder();
+  button.addEventListener('click', () => {
+    if (!confirm('Show again ALL problems marked Accept, in all checks? They come back in the next reports.')) return;
+    location.href = 'scripturechecker:accept?run=' + encodeURIComponent(run) + '&clear=all';
+    try {  // the check pages remember their Accept clicks for the look only
+      Object.keys(localStorage).filter(k => k.startsWith('accepted ' + run + ' ')).forEach(k => localStorage.removeItem(k));
+    } catch (e) {}
+    info.textContent = 'Done. Run the checks again to see the problems.';
+  });
+})();
+</script>"""
+
+
 def _page(title: str, body: str) -> str:
     return (f"<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
             f"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
@@ -320,7 +348,7 @@ def write_index(report_dir: Path, project: str, results: list[CheckResult], loca
     since = (f"<p class=\"muted\">New and Fixed: compared with the run of {html.escape(previous)} "
              "(only the checks and books of both runs).</p>\n" if compared else "")
     hidden = (f"<p class=\"muted\">{accepted} places you accepted earlier are hidden "
-              "(to show them again: the Accepted button in the window).</p>\n" if accepted else "")
+              "(to show them again: Undo all Accept on the first page of the report, or the Accepted button in the window).</p>\n" if accepted else "")
     body = (f"<h1>{html.escape(project)}</h1>\n"
             f"<p class=\"muted\">Checked {datetime.now():%Y-%m-%d %H:%M}. "
             f"Errors: {errors}, warnings: {warnings}. Click a check to see its problems.</p>\n"
@@ -332,7 +360,8 @@ def write_index(report_dir: Path, project: str, results: list[CheckResult], loca
             "<th class=\"n\">Warnings</th><th class=\"n\">Different problems</th>"
             + ("<th class=\"n\">New</th><th class=\"n\">Fixed</th>" if compared else "")
             + "<th></th></tr></thead>\n"
-            f"<tbody>\n{rows}\n</tbody>\n</table></div>")
+            f"<tbody>\n{rows}\n</tbody>\n</table></div>\n"
+            + UNDO_ALL.replace("RUN_PATH", json.dumps(str(report_dir.resolve())).replace("</", "<\\/")))
     path = report_dir / "index.html"
     path.write_text(_page(f"{project} checks", body), encoding="utf-8")
     return path

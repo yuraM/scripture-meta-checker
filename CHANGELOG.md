@@ -24,6 +24,7 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 - **Accept a problem:** each problem in the report has an **Accept** button (not a problem). The next reports
   hide the problem in those places. **Undo** takes it back. The **Accepted** button in the window lists the
   accepted problems by check: **Clear** shows the problems of one check again, **Clear all** shows all of them.
+  The first page of the report (index.html) has the button **Undo all Accept** too.
 - **"!" instead of 0:** when a check has nothing to check with (a file of the project is missing or empty, or the
   list in Paratext is empty, for example the Ordinal list or the quotation marks), the report shows a red **!** and
   the reason, not 0 problems.
