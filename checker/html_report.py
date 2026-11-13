@@ -223,9 +223,22 @@ list.addEventListener('click', e => {
       const div = button.closest('.block');
       div.classList.toggle('done', done.has(i));
       button.outerHTML = acceptButton(data[i], i);
+      counts();
     }, 0);
   }
 });
+// The counts at the top leave out the places accepted on this page (they are hidden in the next reports).
+const COUNTS = {error: document.getElementById('count-error'), warning: document.getElementById('count-warning')};
+const BASE = {error: +COUNTS.error.textContent, warning: +COUNTS.warning.textContent};
+function counts(){
+  const left = {...BASE};
+  let places = 0;
+  done.forEach(i => { if (data[i]) { left[data[i].severity] -= data[i].count; places += data[i].count; } });
+  COUNTS.error.textContent = left.error; COUNTS.warning.textContent = left.warning;
+  document.getElementById('count-accepted').textContent =
+    places ? ` (${places} accepted now: hidden in the next reports)` : '';
+}
+counts();
 function render(){
   const q = search.value.trim().toLowerCase();
   matches = data.map((p, i) => [p, i]).filter(([p]) =>
@@ -330,7 +343,11 @@ def _index_rows(results: list[CheckResult], compared: bool = False) -> str:
                 rows.append(f'<tr class="group"><th colspan="{width}">{html.escape(group)}{order}</th></tr>')
         step = next((f"{checks.index(r.name) + 1}. " for _, title, checks in GROUPS
                      if title == group and r.name in checks and len(checks) > 1), "")
-        rows.append(f'<tr><td>{step}<a href="{HTML_FOLDER}/{html.escape(r.name)}.html">{html.escape(r.name)}</a></td>'
+        # Places accepted earlier and left out of the counts: "+2 accepted" after the name.
+        accepted = (f' <span class="z" title="Places marked Accept: not counted, not shown">+{r.accepted} accepted</span>'
+                    if r.accepted else "")
+        rows.append(f'<tr><td>{step}<a href="{HTML_FOLDER}/{html.escape(r.name)}.html">{html.escape(r.name)}</a>'
+                    f'{accepted}</td>'
                     f'{_counts(r, compared)}<td><a class="muted" href="{TXT_FOLDER}/{html.escape(r.name)}.txt">txt</a></td></tr>')
     return "\n".join(rows)
 
@@ -379,8 +396,9 @@ def write_check_page(report_dir: Path, project: str, result: CheckResult, locati
     else:
         data = json.dumps([p.__dict__ for p in result.problems], ensure_ascii=False).replace("</", "<\\/")
         body = (header
-                + f"<p>Errors: <span class=\"e\">{result.errors}</span>, warnings: "
-                  f"<span class=\"w\">{result.warnings}</span>. "
+                + f"<p>Errors: <span class=\"e\" id=\"count-error\">{result.errors}</span>, warnings: "
+                  f"<span class=\"w\" id=\"count-warning\">{result.warnings}</span>"
+                  "<span class=\"muted\" id=\"count-accepted\"></span>. "
                   f"<span class=\"muted\">{html.escape(location_help)}</span></p>\n"
                 + (f"<p class=\"desc\">{html.escape(result.note)}</p>\n" if result.note else "")
                 + "<div class=\"tools\"><input type=\"search\" id=\"search\" placeholder=\"Search in this report\">"

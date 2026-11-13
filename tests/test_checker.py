@@ -1417,6 +1417,8 @@ class HistoryTest(unittest.TestCase):
             results = write_reports(Path(folder) / "TST", findings, ["spelling"], third, True, {})
             self.assertEqual((results[0].errors, results[0].warnings, results[0].accepted), (0, 1, 2))
             self.assertIn("2 places you accepted earlier are hidden", results[0].note)
+            self.assertIn("+2 accepted</span>", (third / "index.html").read_text(encoding="utf-8"))
+            self.assertIn('id="count-warning">1<', (third / "html" / "spelling.html").read_text(encoding="utf-8"))
             self.assertEqual(results[0].new, 0)
             # Undo, then clear one check / all.
             self.assertEqual(accept(link + "&undo=1"), "")
