@@ -232,9 +232,14 @@ const COUNTS = {error: document.getElementById('count-error'), warning: document
 const BASE = {error: +COUNTS.error.textContent, warning: +COUNTS.warning.textContent};
 function counts(){
   const left = {...BASE};
-  let places = 0;
-  done.forEach(i => { if (data[i]) { left[data[i].severity] -= data[i].count; places += data[i].count; } });
+  let places = 0, problems = 0;
+  done.forEach(i => { if (data[i]) { left[data[i].severity] -= data[i].count; places += data[i].count; problems++; } });
   COUNTS.error.textContent = left.error; COUNTS.warning.textContent = left.warning;
+  // index.html reads this and takes the accepted places out of its table at once.
+  try {
+    localStorage.setItem('accepted counts ' + RUN + ' ' + CHECK, JSON.stringify(
+      {error: BASE.error - left.error, warning: BASE.warning - left.warning, problems: problems}));
+  } catch (e) {}
   document.getElementById('count-accepted').textContent =
     places ? ` (${places} accepted now: hidden in the next reports)` : '';
 }
@@ -276,12 +281,42 @@ UNDO_ALL = r"""<p><button id="undo-all" type="button" title="Problems marked Acc
     return path.replace(/\//g, '\\');
   }
   const run = runFolder();
+  // Places accepted on the check pages after this run: taken out of the table at once (the next run hides them).
+  function accepted(check){
+    try { return JSON.parse(localStorage.getItem('accepted counts ' + run + ' ' + check) || 'null'); } catch (e) { return null; }
+  }
+  function update(){
+    const total = {error: 0, warning: 0};
+    document.querySelectorAll('[data-count]').forEach(cell => {
+      const now = accepted(cell.dataset.check) || {error: 0, warning: 0, problems: 0};
+      const base = +cell.dataset.base, kind = cell.dataset.count;
+      if (kind === 'accepted') {
+        const places = base + now.error + now.warning;
+        cell.textContent = places ? `+${places} accepted` : '';
+        return;
+      }
+      const value = base - (now[kind] || 0);
+      const span = cell.querySelector('span');
+      if (span) span.textContent = value;
+      if (kind !== 'problems') total[kind] += now[kind] || 0;
+    });
+    ['error', 'warning'].forEach(kind => {
+      const el = document.getElementById('total-' + kind);
+      el.textContent = +el.dataset.base - total[kind];
+    });
+  }
+  update();
+  // Back from a check page (the browser may show the page from its cache) or to this tab: count again.
+  window.addEventListener('pageshow', update);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) update(); });
   button.addEventListener('click', () => {
     if (!confirm('Show again ALL problems marked Accept, in all checks? They come back in the next reports.')) return;
     location.href = 'scripturechecker:accept?run=' + encodeURIComponent(run) + '&clear=all';
     try {  // the check pages remember their Accept clicks for the look only
-      Object.keys(localStorage).filter(k => k.startsWith('accepted ' + run + ' ')).forEach(k => localStorage.removeItem(k));
+      Object.keys(localStorage).filter(k => k.startsWith('accepted ' + run + ' ') ||
+        k.startsWith('accepted counts ' + run + ' ')).forEach(k => localStorage.removeItem(k));
     } catch (e) {}
+    update();
     info.textContent = 'Done. Run the checks again to see the problems.';
   });
 })();
@@ -304,7 +339,12 @@ def _counts(result: CheckResult, compared: bool) -> str:
                 f'<span class="z">{short}</span></td>')
     errors = f'<span class="e">{result.errors}</span>' if result.errors else '<span class="z">0</span>'
     warnings = f'<span class="w">{result.warnings}</span>' if result.warnings else '<span class="z">0</span>'
-    cells = f'<td class="n">{errors}</td><td class="n">{warnings}</td><td class="n">{len(result.problems)}</td>'
+    # data-* : the page script takes out the places accepted after this run (UNDO_ALL script).
+    check = html.escape(result.name)
+    cells = (f'<td class="n" data-check="{check}" data-count="error" data-base="{result.errors}">{errors}</td>'
+             f'<td class="n" data-check="{check}" data-count="warning" data-base="{result.warnings}">{warnings}</td>'
+             f'<td class="n" data-check="{check}" data-count="problems" data-base="{len(result.problems)}">'
+             f'{len(result.problems)}</td>')
     if compared:
         if result.new is None:
             cells += '<td class="n z" colspan="2" title="Not in the previous run">-</td>'
@@ -344,8 +384,10 @@ def _index_rows(results: list[CheckResult], compared: bool = False) -> str:
         step = next((f"{checks.index(r.name) + 1}. " for _, title, checks in GROUPS
                      if title == group and r.name in checks and len(checks) > 1), "")
         # Places accepted earlier and left out of the counts: "+2 accepted" after the name.
-        accepted = (f' <span class="z" title="Places marked Accept: not counted, not shown">+{r.accepted} accepted</span>'
-                    if r.accepted else "")
+        # The script adds the places accepted after this run (data-base = accepted before it).
+        accepted = (f' <span class="z" data-check="{html.escape(r.name)}" data-count="accepted" data-base="{r.accepted}" '
+                    f'title="Places marked Accept: not counted, not shown">'
+                    f'{f"+{r.accepted} accepted" if r.accepted else ""}</span>')
         rows.append(f'<tr><td>{step}<a href="{HTML_FOLDER}/{html.escape(r.name)}.html">{html.escape(r.name)}</a>'
                     f'{accepted}</td>'
                     f'{_counts(r, compared)}<td><a class="muted" href="{TXT_FOLDER}/{html.escape(r.name)}.txt">txt</a></td></tr>')
@@ -368,7 +410,9 @@ def write_index(report_dir: Path, project: str, results: list[CheckResult], loca
               "(to show them again: Undo all Accept on the first page of the report, or the Accepted button in the window).</p>\n" if accepted else "")
     body = (f"<h1>{html.escape(project)}</h1>\n"
             f"<p class=\"muted\">Checked {datetime.now():%Y-%m-%d %H:%M}. "
-            f"Errors: {errors}, warnings: {warnings}. Click a check to see its problems.</p>\n"
+            f"Errors: <span id=\"total-error\" data-base=\"{errors}\">{errors}</span>, warnings: "
+            f"<span id=\"total-warning\" data-base=\"{warnings}\">{warnings}</span>. "
+            "Click a check to see its problems.</p>\n"
             + since + hidden + _first_stages_note(results) +
             f"<p><a href=\"{TXT_FOLDER}/\">Open the folder of text reports (txt)</a> "
             f"<span class=\"muted\">&middot; <a class=\"muted\" href=\"{HTML_FOLDER}/\">html</a></span></p>\n"
