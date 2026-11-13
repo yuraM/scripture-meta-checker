@@ -65,6 +65,18 @@ CHECK_DESCRIPTIONS = {
                         "430 years later …). Write the number in words, or change the order of the words. A "
                         "paragraph that starts with a number may have a verse number without \\v. Lists (\\li), "
                         "tables, headings, notes and numbers after a dash are not counted.",
+    "quote-spaces": "Two quotation marks of different levels next to each other (” and ’) with another space between "
+                    "them than the project nearly always uses there (usually a narrow no-break space U+202F).",
+    "digit-hyphens": "A hyphen-minus between two numbers (10-12) where the project nearly always writes another sign "
+                     "(a non-breaking hyphen ‑ or a dash –). Verse numbers and note references are not counted.",
+    "marker-spaces": "A space before the end of a character marker ('the \\nd Lord \\nd*'). The space belongs after "
+                     "the end marker ('the \\nd Lord\\nd* '), or the printed text gets a wrong space.",
+    "chapter-end-headings": "A heading (\\s, \\ms) as the last line of a chapter or a book. A heading belongs before "
+                            "the text it names: move it after the next \\c.",
+    "footnote-spaces": "Spaces around footnotes: a space at the end of a note (before \\f*); a space before a note "
+                       "when the project nearly always writes the note right after the word; a word right after "
+                       "\\f* with no space.",
+    "outline-references": "A reference in a line of the book outline (\\io) that is not marked with \\ior ... \\ior*.",
     "self-references": "A cross reference \\x that points to the verse it stands in.",
     "one-chapter-books": "References to books with one chapter (Obadiah, Philemon, 2 and 3 John, Jude) written two "
                          "ways: with the chapter (Jude 1:3) and without it (Jude 3). The rare way is shown.",

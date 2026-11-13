@@ -36,6 +36,12 @@ CHECKS = [
     "digit-systems",         # digits of another system than most numbers (۲۷ among 27)
     "fractions",             # 1/2 where the project writes 1⁄2
     "sentence-numbers",      # a sentence or a quote starts with digits (… years. 430 years …)
+    "digit-hyphens",         # 10-12 with a hyphen-minus where the project writes 10‑12
+    "quote-spaces",          # ”’ without the narrow no-break space the project puts between two quotation marks
+    "marker-spaces",         # 'the \nd Lord \nd*': the space goes after the end marker
+    "chapter-end-headings",  # a heading as the last line of a chapter
+    "footnote-spaces",       # space at the end of a note, before a note, missing after \f*
+    "outline-references",    # a reference in \io without \ior
     "normalization",         # NormalizationForm (NFC)
     "paragraph-final",       # last punctuation of a paragraph; headings ending with "."
     "ordinals",              # NumberOrdinals: "5-го", "8th", "ke-430"

@@ -6,6 +6,11 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
+- **Six new checks for typesetting** (all opt-in, each says what to change):
+  quote-spaces (the space between two quotation marks, usually U+202F), digit-hyphens (10-12 where the project
+  writes 10‑12), marker-spaces ('\nd Lord \nd*': the space goes after the end marker), chapter-end-headings
+  (a heading as the last line of a chapter), footnote-spaces (spaces at the end of, before and after a note) and
+  outline-references (a reference in \io without \ior).
 - **New check sentence-numbers** (Unit 3, Numbers and spaces): a sentence or the words of a speaker start with a
   number in digits ("… there. 430 years …"). A paragraph that starts with a number may have a verse number without
   \v. Lists, tables and numbers after a dash are not counted.

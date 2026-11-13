@@ -8,6 +8,10 @@ from collections.abc import Callable, Iterable, Iterator
 from functools import lru_cache
 
 from checker import places
+from checker.typesetting import (
+    check_chapter_end_headings, check_digit_hyphens, check_footnote_spaces, check_marker_spaces,
+    check_outline_references, check_quote_spaces,
+)
 from checker.forms import (
     check_all_caps, check_apostrophes, check_dashes, check_digit_systems, check_ellipses, check_fractions, check_heading_case,
     check_marker_capitals, check_note_callers, check_sentence_numbers, check_untranslated,
@@ -1214,6 +1218,12 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "digit-systems": lambda usage, ctx: check_digit_systems(usage.segments, ctx),
     "fractions": lambda usage, ctx: check_fractions(usage.segments, ctx),
     "sentence-numbers": lambda usage, ctx: check_sentence_numbers(usage.segments, ctx),
+    "quote-spaces": lambda usage, ctx: check_quote_spaces(usage.sources, ctx),
+    "digit-hyphens": lambda usage, ctx: check_digit_hyphens(usage.sources, ctx),
+    "marker-spaces": lambda usage, ctx: check_marker_spaces(usage.sources, ctx),
+    "footnote-spaces": lambda usage, ctx: check_footnote_spaces(usage.sources, ctx),
+    "outline-references": lambda usage, ctx: check_outline_references(usage.sources, ctx),
+    "chapter-end-headings": lambda usage, ctx: check_chapter_end_headings(usage.sources, ctx),
     "line-ends": lambda usage, ctx: check_line_ends(usage.flow, usage.case_refs, ctx),
     "poetry-two-sentences": lambda usage, ctx: check_poetry_two_sentences(usage.poetry_lines, ctx),
     "poetry-long-lines": lambda usage, ctx: check_poetry_long_lines(usage.poetry_lines, ctx),

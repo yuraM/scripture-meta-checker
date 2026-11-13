@@ -381,6 +381,27 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertIn("the words of a speaker start", found[1].message)
         self.assertIn("mark it with \\v", found[2].message)
 
+    def test_typesetting(self):
+        from checker import typesetting
+        nnbsp = chr(0x202F)
+        body = "".join(f"\\v {n} Сказав: «Він каже: „так“{nnbsp}». Вірші 1‑{n + 1}.\\f + \\fr 1:{n} \\ft Нотатка.\\f* і\n"
+                       for n in range(1, 25))
+        content = ("\\id TST\n\\io1 Початок (1:1–17)\n\\io1 Кінець (\\ior 2:1‑5\\ior*)\n\\c 1\n\\p\n" + body
+                   + "\\v 25 «Він каже: „ні“ ». Вірші 3-4 і \\nd Господь \\nd* сказав\\f + \\fr 1:25 \\ft Інше. \\f*"
+                     "так \\f + \\fr 1:25 \\ft Ще.\\f* і\n\\s1 Заголовок\n\\c 2\n\\p \\v 1 Текст.\n")
+        sources = [("TST", content)]
+        self.ctx.settings = replace(self.settings, quote_levels=(("«", "»"), ("„", "“")))
+
+        def found(check):
+            return [(f.ref, f.item) for f in getattr(typesetting, f"check_{check}")(sources, self.ctx)]
+
+        self.assertEqual(found("quote_spaces"), [("1:25", "“ »")])
+        self.assertEqual(found("digit_hyphens"), [("1:25", "3-4")])
+        self.assertEqual(found("marker_spaces"), [("1:25", "\\nd*")])
+        self.assertEqual(sorted(found("footnote_spaces")), [("1:25", "\\f"), ("1:25", "\\f*"), ("1:25", "\\f*")])
+        self.assertEqual(found("outline_references"), [("0:0", "1:1–17")])
+        self.assertEqual(found("chapter_end_headings"), [("1:25", "Заголовок")])
+
     def test_marker_capitals(self):
         from checker import forms
         usfm = ("\\id TST\n\\c 1\n\\p \\v 1 Написано:\n\\pc Вавилон великий,\n\\pc мати блудниць\n"

@@ -164,6 +164,7 @@ wordlist/
 │   ├── poetry.py        # the Unit 6 group Poetry: numbers, line ends, two sentences, long lines, verses, chapters
 │   ├── divine_name.py   # divine-name check: the divine name without \nd in verses of nd_verses.txt
 │   ├── nd_verses.txt    # verses (Original numbers) where a base translation has LORD in \nd; numbers only
+│   ├── typesetting.py   # quote-spaces, digit-hyphens, marker-spaces, footnote-spaces, outline-references, chapter-end-headings (raw files)
 │   ├── spaces.py        # special-spaces check: U+202F, \fv … \fv*, abbreviations with ~ (raw file)
 │   ├── html_report.py   # HTML report: index.html + one page per check (static, inline CSS/JS)
 │   ├── gui.py           # tkinter window: choose project and checks, run, open the report
@@ -278,6 +279,12 @@ wordlist/
 | `apostrophes` (opt-in, Unit 3 > Characters) | text (not `XXA…`: often another language) | — | a sign between two letters (`' ’ ʼ ʻ`) that is not the one used in ≥90% of ≥20 such places (`ng'ombe` among `ʼ`); measured on the repo projects: 0 (the cases were in extra material) |
 | `digit-systems` (opt-in, Unit 3 > Numbers and spaces) | all segments, all books | — | digits of another system than ≥90% of ≥20 numbers (`۲۷` among `27`); numbers with letters of the digits' own script within 30 characters (`Copyright 1985` in a Myanmar text) are skipped; repo projects: 0 |
 | `sentence-numbers` (opt-in, Unit 3 > Numbers and spaces) | text paragraphs (`p m pi# q# qm# pc …`; not lists `\li \lim \lf`, tables, headings, notes, front/back matter) + SentenceFinalPunctuation (marks named FULL STOP / EXCLAMATION / QUESTION / DANDA), quotation marks, Abbreviations | — | a number in digits starts a sentence (`…थियो। 430 वर्ष`), the words of a speaker (after an opening quote: `‘3,000 लीटर`) or a paragraph (`\p 21 Ndipo`: a verse number without `\v`?); not after a dash (`— 50 000 верблюдов` is a list in a sentence), not after an abbreviation, not a reference (`3:16`, `\xt`). Added 2026-11-13 (user request); measured on the 10 repo projects: 0-2, 6 in all, all real |
+| `quote-spaces` (opt-in, Unit 3 > Quotes and brackets) | raw files + Quotes / InnerQuotes / InnerInnerQuotes | — | two marks of different levels both opening or both closing (`” ’`, `»“`) with another space between them than ≥90% of ≥20 such places (usually U+202F; markers between do not count); a project that never puts one (none in all places) is left alone. Repo projects: 0-2 (`” ’` with a space, U+2006 in XXA) |
+| `digit-hyphens` (opt-in, Unit 3 > Numbers and spaces) | raw files (not `\v \c \vp \fr \xo`, link attributes, front/back matter) | — | hyphen-minus between two digits (`11:1-9`) when ≤10% of the digit-dash-digit places use it and ≥20 use another sign; the message gives the most used sign (`‑` U+2011 or `–`). A project that writes `-` (5 828×) is left alone. Repo projects: 0-2 |
+| `marker-spaces` (opt-in, Unit 2 > Markers and titles) | raw files | — | a space before the end of a character marker (`\nd Lord \nd*`, `\+xt 6‑14 \+xt*`): "change 'Lord \nd*' to 'Lord\nd* '"; not `\f* \x* \fe*` and not `\fv*` (special-spaces). Repo projects: 0-6 |
+| `chapter-end-headings` (opt-in, Unit 2 > Markers and titles) | raw files (not front/back matter) | — | `\s#`/`\ms#` (with its `\r \mr \sr \sp`) as the last paragraph before `\c` or the end of the book. Repo projects: 0 (a safety net) |
+| `footnote-spaces` (opt-in, Unit 5 > Footnotes) | raw `\f`/`\fe` | — | a space at the end of a note (before `\f*`, also after an empty `\ft`); a space between a word and `\f` when ≥90% of ≥20 notes stand right after the word (not after a marker or `\v N`); a letter right after `\f*` when ≤10% of the notes are followed by a letter (scripts without spaces glue them). Repo projects: 0-4 |
+| `outline-references` (opt-in, Unit 5 > References) | raw `\io#` lines + ChapterVerseSeparator | — | `chapter:verse` (with its range) in an outline line outside `\ior … \ior*`. Repo projects: 0-7 (one project marks no outline; a broken `\ ior*` was found) |
 | `fractions` (opt-in, Unit 3 > Numbers and spaces) | all segments, all books (`BAK` tables) | — | `1/2` when more fractions use `⁄` (U+2044); only first number < second (`587/6` is a year); a project that writes `/` is left alone; repo projects: 1 (`1/10` in BAK among 12 `⁄`) |
 | `footnote-quotes` (opt-in, Unit 5 > Footnotes) | raw `\f … \f*` (`\fq`) + verse texts | — | a word of `\fq` is not in the verse, the verses next to it or the verses of its `\fr` range; a word counts as found with another ending (the first letters but the last 3, at least 3) or inside a longer word (Ethiopic prefixes). Repo projects: 0-9 (`\fq` used for added text that is not in the verse, changed verses) |
 | `self-references` (opt-in, Unit 5 > References) | `\xt` inside `\x`/`\ex` (`XtReference.note`) | — | the cross reference includes its own verse (footnotes may: \"some manuscripts do not have verse 28\"); repo projects: 0-4 |
@@ -324,7 +331,7 @@ book in order, because a quote may span paragraphs and chapters. Design:
   are warnings marked "(in a footnote)".
 
 `unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `divine-name`, `numbers`, `footnotes`, `references`, `untranslated-verses`, `repeated-text`, `verse-lengths`, `glossary-words`, `figures`, `dashes`, `ellipses`,
-`heading-case`, `all-caps`, `marker-capitals`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `sentence-numbers`, `self-references`, `one-chapter-books`, `term-renderings`,
+`heading-case`, `all-caps`, `marker-capitals`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `sentence-numbers`, `quote-spaces`, `digit-hyphens`, `marker-spaces`, `chapter-end-headings`, `footnote-spaces`, `outline-references`, `self-references`, `one-chapter-books`, `term-renderings`,
 `poetry-numbers`, `line-ends`, `poetry-two-sentences`, `poetry-long-lines`, `poetry-verse-inside`,
 `poetry-chapter-break`, `parallel-changes`,
 `parallel-differences`, `terms` and `term-lists` are project-level checks (`PROJECT_CHECKS`): they run once after
@@ -515,6 +522,17 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
 - Findings are sorted in book order (order of the files), then chapter and verse.
 
 ## Ideas / not implemented
+
+- **A Paratext user menu of regular expressions** (`userMenu*.txt` in the repo folder, ignored by git; read 2026-11-13,
+  user request: "even replacements are warnings: change X to Y"). Taken (`checker/typesetting.py`): space between two
+  quotation marks, hyphen-minus between digits, space before an end marker, spaces around notes, `\ior` in outlines,
+  heading at a chapter end. Already covered: `\fv` form (special-spaces), references in notes (usfm), "Or" without
+  `\fqa` (footnotes), `\x` to one-chapter books (one-chapter-books), `\toc` from `\mt` (book-titles), dashes,
+  suspect close quotes (tried and dropped 2026-11-12). Measured and left out: `\b` next to a heading (12-33 per
+  project) and `\m` after a heading (0-5, often on purpose: Biblica style choices), `\b` inside a list (~220:
+  genealogies), markers without a number (`\q` = `\q1` in USFM), a footnote repeated in its chapter (38-196: notes
+  like "Hebrew: Sheol" repeat; `\cat dup` is a print workflow). Not checks: conversions (USFM 2 to 3, tables, RTL,
+  Thai word breaks), counts, extracting lists.
 
 - Indonesian `ValidSentenceFinalPunctCapitalization` contains bare `. ! ?`, which disables the
   `capitalization` check completely (0 findings); without them it finds 13 real cases
