@@ -183,7 +183,9 @@ class CheckerWindow:
         # The buttons open the reports in the Reports folder, also ones of an earlier run.
         self.report_dir.trace_add("write", lambda *_: self._refresh_buttons())
         # Back from the browser (where Accept was clicked): count the accepted problems again.
-        root.bind("<FocusIn>", lambda event: self._refresh_buttons() if event.widget is root else None)
+        # (The event comes from the widget that gets the focus, not from the window itself; reading the small list
+        # each time is cheap.)
+        root.bind("<FocusIn>", lambda _event: self._refresh_buttons())
         self.status = StringVar(value="Choose a project and press Run checks.")
         ttk.Label(frame, textvariable=self.status, wraplength=900).grid(row=6, column=0, columnspan=3, sticky="w",
                                                                          pady=(6, 0))
