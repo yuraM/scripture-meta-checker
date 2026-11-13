@@ -15,6 +15,7 @@ import webbrowser
 from pathlib import Path
 from tkinter import BooleanVar, Button, Frame, Label, StringVar, Tk, filedialog, messagebox, ttk
 
+from checker import history
 from checker.books import DEUTEROCANON, EXTRA_MATERIAL, NEW_TESTAMENT, OLD_TESTAMENT
 from checker.cli import (
     CHECK_DESCRIPTIONS, latest_run, new_run_folder, project_books, run_checks, write_reports,
@@ -167,13 +168,21 @@ class CheckerWindow:
         self.run_hint.grid(row=0, column=1, padx=(8, 0))
         self.progress = ttk.Progressbar(running_row, mode="determinate")
         self.progress.grid(row=0, column=2, sticky="ew", padx=8)
+        # Problems accepted in the reports ("not a problem"): the list can be cleared here.
+        self.accepted_button = ttk.Button(running_row, text="Accepted", command=self._show_accepted,
+                                          state="disabled")
+        self.accepted_button.grid(row=0, column=3, padx=(0, 6))
+        _Tooltip(self.accepted_button, "Problems marked Accept in the reports are hidden in the next reports. "
+                                       "Here you can show them again.")
         self.folder_button = ttk.Button(running_row, text="Open txt folder", command=self._open_folder,
                                         state="disabled")
-        self.folder_button.grid(row=0, column=3, padx=(0, 6))
+        self.folder_button.grid(row=0, column=4, padx=(0, 6))
         self.open_button = ttk.Button(running_row, text="Open report", command=self._open, state="disabled")
-        self.open_button.grid(row=0, column=4)
+        self.open_button.grid(row=0, column=5)
         # The buttons open the reports in the Reports folder, also ones of an earlier run.
         self.report_dir.trace_add("write", lambda *_: self._refresh_buttons())
+        # Back from the browser (where Accept was clicked): count the accepted problems again.
+        root.bind("<FocusIn>", lambda event: self._refresh_buttons() if event.widget is root else None)
         self.status = StringVar(value="Choose a project and press Run checks.")
         ttk.Label(frame, textvariable=self.status, wraplength=900).grid(row=6, column=0, columnspan=3, sticky="w",
                                                                          pady=(6, 0))
@@ -309,7 +318,7 @@ class CheckerWindow:
             findings = list(run_checks(project, checks, books, None, skipped, progress, notes))
             self.events.put(("progress", 1, 1, "writing the reports"))
             run = new_run_folder(report_dir)
-            results = write_reports(project, findings, checks, run, True, skipped, notes)
+            results = write_reports(project, findings, checks, run, True, skipped, notes, books)
             self.events.put(("done", results, run / "index.html"))
         except Exception:  # shown to the user, the window stays open
             self.events.put(("error", traceback.format_exc()))
@@ -326,7 +335,10 @@ class CheckerWindow:
                     _, results, index = event
                     errors = sum(r.errors for r in results)
                     warnings = sum(r.warnings for r in results)
-                    self.status.set(f"Done: {errors} errors, {warnings} warnings. Report: {index}")
+                    compared = [r for r in results if r.new is not None]
+                    since = (f" Since the last run: {sum(r.new for r in compared)} new, "
+                             f"{sum(r.fixed for r in compared)} fixed." if compared else "")
+                    self.status.set(f"Done: {errors} errors, {warnings} warnings.{since} Report: {index}")
                     self.running = False
                     self._refresh_run()
                     self._refresh_buttons()
@@ -376,6 +388,54 @@ class CheckerWindow:
         running = self.running
         self.open_button.configure(state="normal" if paths and paths[0].is_file() and not running else "disabled")
         self.folder_button.configure(state="normal" if paths and paths[1].is_dir() and not running else "disabled")
+        count = sum(self._accepted_counts().values())
+        self.accepted_button.configure(text=f"Accepted ({count})" if count else "Accepted",
+                                       state="normal" if count and not running else "disabled")
+
+    def _accepted_counts(self):
+        text = self.report_dir.get().strip()
+        return history.accepted_counts(Path(text)) if text else {}
+
+    def _show_accepted(self) -> None:
+        """A small window: the accepted problems per check, each with Clear, and Clear all."""
+        from tkinter import Toplevel
+
+        text = self.report_dir.get().strip()
+        if not text:
+            return
+        report_dir = Path(text)
+        dialog = Toplevel(self.root)
+        dialog.title("Accepted problems")
+        dialog.transient(self.root)
+        frame = ttk.Frame(dialog, padding=12)
+        frame.grid(sticky="nsew")
+
+        def fill() -> None:
+            for child in frame.winfo_children():
+                child.destroy()
+            counts = history.accepted_counts(report_dir)
+            ttk.Label(frame, text="These places were marked Accept (not a problem) in the reports.\n"
+                                  "They are hidden in the next reports. Clear = show them again.",
+                      justify="left").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+            for row, (name, count) in enumerate(sorted(counts.items()), start=1):
+                ttk.Label(frame, text=name).grid(row=row, column=0, sticky="w")
+                ttk.Label(frame, text=f"{count} places").grid(row=row, column=1, sticky="e", padx=12)
+                ttk.Button(frame, text="Clear", command=lambda n=name: clear(n)).grid(row=row, column=2, pady=1)
+            last = len(counts) + 1
+            buttons = ttk.Frame(frame)
+            buttons.grid(row=last, column=0, columnspan=3, sticky="e", pady=(10, 0))
+            ttk.Button(buttons, text="Clear all", command=lambda: clear(None),
+                       state="normal" if counts else "disabled").grid(row=0, column=0)
+            ttk.Button(buttons, text="Close", command=dialog.destroy).grid(row=0, column=1, padx=(6, 0))
+            self._refresh_buttons()
+
+        def clear(name) -> None:
+            what = f"all accepted places of {name}" if name else "ALL accepted places of all checks"
+            if messagebox.askyesno(TITLE, f"Show {what} again in the next reports?", parent=dialog):
+                history.clear_accepted(report_dir, name)
+                fill()
+
+        fill()
 
     def _open(self) -> None:
         paths = self._report_paths()

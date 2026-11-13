@@ -29,6 +29,7 @@ class Problem:
     context: str
     where: str
     item: str = ""  # what was found (a word, a character, a pattern): marked in the context
+    new: int = 0  # places that the previous run did not have
 
 
 @dataclass
@@ -40,6 +41,9 @@ class CheckResult:
     skipped: str = ""  # reason if the check could not run
     problems: list[Problem] = field(default_factory=list)
     note: str = ""  # what the check did not list and why
+    new: int | None = None  # places new since the previous run; None = not compared
+    fixed: int | None = None  # places of the previous run that are gone
+    accepted: int = 0  # places accepted in an earlier report, left out
 
 
 STYLE = """
@@ -84,6 +88,15 @@ mark{background:var(--warn-bg);color:inherit;font-weight:700;outline:1px solid v
 #copied{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1f2933;color:#f5f7f6;
 padding:6px 14px;border-radius:4px;opacity:0;transition:opacity .2s;pointer-events:none}
 #copied.on{opacity:1}
+.new{display:inline-block;background:var(--accent);color:var(--card);font-size:.75rem;font-weight:700;
+padding:0 6px;border-radius:3px;margin-left:6px;vertical-align:middle}
+.block{position:relative}
+.block h3{padding-right:6.5em}
+a.accept{position:absolute;top:8px;right:10px;font-size:.85rem;text-decoration:none;border:1px solid var(--line);
+border-radius:4px;padding:1px 8px;color:var(--muted)}
+a.accept:hover{color:var(--accent);border-color:var(--accent)}
+.block.done{opacity:.45}
+.block.done a.accept{opacity:1}
 @media (prefers-color-scheme:dark){code.item{background:#000;border:1px solid var(--line)}}
 """
 
@@ -92,7 +105,7 @@ SCRIPT = r"""
 const data = JSON.parse(document.getElementById('data').textContent);
 const list = document.getElementById('list'), more = document.getElementById('more'),
       info = document.getElementById('info'), search = document.getElementById('search'),
-      errorsOnly = document.getElementById('errors-only');
+      errorsOnly = document.getElementById('errors-only'), newOnly = document.getElementById('new-only');
 let shown = 0, matches = [];
 function esc(s){return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // "MAT 27:46, 28:1 (2×); MRK 15:34": each chapter:verse becomes a link that makes Paratext show the verse
@@ -149,12 +162,42 @@ function context(p){
   return visible(p.context.slice(0, at), false) + `<mark>${visible(item, false)}</mark>`
        + visible(p.context.slice(at + item.length), false);
 }
+// Accept = "this is not a problem": a link that this program (scripturechecker:accept, checker/history.py) turns
+// into a line of accepted.json; the next reports leave the problem out. The page remembers the click only for the
+// look (the real list is the file).
+function runFolder(){
+  if (location.protocol !== 'file:') return LINK.run || '';
+  const url = new URL('..', location.href);
+  let path = decodeURIComponent(url.pathname).replace(/\/$/, '');
+  if (/^\/[A-Za-z]:/.test(path)) path = path.slice(1);
+  if (url.host) path = '//' + url.host + path;
+  return path.replace(/\//g, '\\');
+}
+const RUN = runFolder(), STORE = 'accepted ' + RUN + ' ' + CHECK;
+let done = new Set();
+try { done = new Set(JSON.parse(localStorage.getItem(STORE) || '[]')); } catch (e) {}
+function remember(){ try { localStorage.setItem(STORE, JSON.stringify([...done])); } catch (e) {} }
+function acceptLink(p, undo){
+  return `${LINK.protocol}:accept?run=${encodeURIComponent(RUN)}&check=${encodeURIComponent(CHECK)}`
+       + `&severity=${encodeURIComponent(p.severity)}&message=${encodeURIComponent(p.message)}` + (undo ? '&undo=1' : '');
+}
+function acceptButton(p, i){
+  const undo = done.has(i);
+  return `<a class="accept" data-i="${i}" href="${esc(acceptLink(p, undo))}" `
+       + `title="${undo ? 'Show it again in the next reports' : 'Not a problem: hide it in the next reports'}">`
+       + `${undo ? 'Undo' : 'Accept'}</a>`;
+}
+function newBadge(p){
+  if (!p.new) return '';
+  return `<span class="new" title="Not in the previous report">${p.new === p.count ? 'NEW' : `NEW: ${p.new}`}</span>`;
+}
 function block(p, i){
   const rows = [];
   if (p.count > 1) rows.push(`<div class="row"><span class="label">Found:</span> ${p.count} times</div>`);
   if (p.context) rows.push(`<div class="row"><span class="label">Text:</span> <span class="text">${context(p)}</span></div>`);
   rows.push(`<div class="row"><span class="label">Where:</span> ${where(p.where)}</div>`);
-  return `<div class="block ${p.severity}"><h3>${i + 1}. ${chips(p.message)}</h3>${rows.join('')}</div>`;
+  return `<div class="block ${p.severity}${done.has(i) ? ' done' : ''}" data-i="${i}">${RUN ? acceptButton(p, i) : ''}`
+       + `<h3>${i + 1}. ${chips(p.message)}${newBadge(p)}</h3>${rows.join('')}</div>`;
 }
 const toast = document.createElement('div'); toast.id = 'copied'; toast.textContent = 'Copied';
 document.body.appendChild(toast);
@@ -170,11 +213,23 @@ function copyText(text){
 list.addEventListener('click', e => {
   const chip = e.target.closest('code.item');
   if (chip) copyText(chip.dataset.copy);
+  const button = e.target.closest('a.accept');
+  if (button) {
+    // The browser opens the link first; then the button turns into Undo (or back).
+    const i = +button.dataset.i;
+    setTimeout(() => {
+      if (done.has(i)) done.delete(i); else done.add(i);
+      remember();
+      const div = button.closest('.block');
+      div.classList.toggle('done', done.has(i));
+      button.outerHTML = acceptButton(data[i], i);
+    }, 0);
+  }
 });
 function render(){
   const q = search.value.trim().toLowerCase();
   matches = data.map((p, i) => [p, i]).filter(([p]) =>
-    (!errorsOnly.checked || p.severity === 'error') &&
+    (!errorsOnly.checked || p.severity === 'error') && (!newOnly || !newOnly.checked || p.new) &&
     (!q || (p.message + ' ' + p.context + ' ' + p.where).toLowerCase().includes(q)));
   list.innerHTML = ''; shown = 0; showMore();
 }
@@ -186,6 +241,7 @@ function showMore(){
   more.hidden = shown >= matches.length;
 }
 search.addEventListener('input', render); errorsOnly.addEventListener('change', render);
+if (newOnly) newOnly.addEventListener('change', render);
 more.addEventListener('click', showMore);
 render();
 """
@@ -198,15 +254,24 @@ def _page(title: str, body: str) -> str:
             f"</main>\n</body>\n</html>\n")
 
 
-def _counts(result: CheckResult) -> str:
+def _counts(result: CheckResult, compared: bool) -> str:
     if result.skipped:
         # "!" instead of 0: the check had nothing to check with (a file or a list of the project is missing).
         reason = html.escape(result.skipped)
         short = html.escape(result.skipped.split(". ")[0].rstrip("."))
-        return f'<td class="n" colspan="3" title="{reason}"><span class="e">!</span> <span class="z">{short}</span></td>'
+        return (f'<td class="n" colspan="{5 if compared else 3}" title="{reason}"><span class="e">!</span> '
+                f'<span class="z">{short}</span></td>')
     errors = f'<span class="e">{result.errors}</span>' if result.errors else '<span class="z">0</span>'
     warnings = f'<span class="w">{result.warnings}</span>' if result.warnings else '<span class="z">0</span>'
-    return f'<td class="n">{errors}</td><td class="n">{warnings}</td><td class="n">{len(result.problems)}</td>'
+    cells = f'<td class="n">{errors}</td><td class="n">{warnings}</td><td class="n">{len(result.problems)}</td>'
+    if compared:
+        if result.new is None:
+            cells += '<td class="n z" colspan="2" title="Not in the previous run">-</td>'
+        else:
+            new = f'<span class="new">+{result.new}</span>' if result.new else '<span class="z">0</span>'
+            fixed = f'<span class="w">-{result.fixed}</span>' if result.fixed else '<span class="z">0</span>'
+            cells += f'<td class="n">{new}</td><td class="n">{fixed}</td>'
+    return cells
 
 
 def _first_stages_note(results: list[CheckResult]) -> str:
@@ -219,40 +284,52 @@ def _first_stages_note(results: list[CheckResult]) -> str:
             "they can cause false problems in the later units.</p>\n")
 
 
-def _index_rows(results: list[CheckResult]) -> str:
+def _index_rows(results: list[CheckResult], compared: bool = False) -> str:
     rows, stage, group = [], None, ""
+    width = 7 if compared else 5
     for r in results:
         number = stage_number(r.name)
         if number != stage:
             stage, group = number, ""
             title = STAGES[number - 1][0] if number else "Other checks"
-            rows.append(f'<tr class="stage"><th colspan="5">{html.escape(title)}</th></tr>')
+            rows.append(f'<tr class="stage"><th colspan="{width}">{html.escape(title)}</th></tr>')
         # A group of a unit has its own heading; its checks are numbered in the order to fix them.
         if group_of(r.name) != group:
             group = group_of(r.name)
             if group:
-                rows.append(f'<tr class="group"><th colspan="5">{html.escape(group)}: fix in this order</th></tr>')
+                rows.append(f'<tr class="group"><th colspan="{width}">{html.escape(group)}: fix in this order</th></tr>')
         step = next((f"{checks.index(r.name) + 1}. " for _, title, checks in GROUPS
                      if title == group and r.name in checks), "")
         rows.append(f'<tr><td>{step}<a href="{HTML_FOLDER}/{html.escape(r.name)}.html">{html.escape(r.name)}</a></td>'
-                    f'{_counts(r)}<td><a class="muted" href="{TXT_FOLDER}/{html.escape(r.name)}.txt">txt</a></td></tr>')
+                    f'{_counts(r, compared)}<td><a class="muted" href="{TXT_FOLDER}/{html.escape(r.name)}.txt">txt</a></td></tr>')
     return "\n".join(rows)
 
 
-def write_index(report_dir: Path, project: str, results: list[CheckResult], location_help: str) -> Path:
-    """One row per check, under the title of its stage (results are expected in stage order)."""
-    rows = _index_rows(results)
+def write_index(report_dir: Path, project: str, results: list[CheckResult], location_help: str,
+                previous: str = "") -> Path:
+    """One row per check, under the title of its stage (results are expected in stage order).
+
+    `previous`: the name of the run folder the results were compared with ("" = none)."""
+    compared = bool(previous) and any(r.new is not None for r in results)
+    rows = _index_rows(results, compared)
     errors = sum(r.errors for r in results)
     warnings = sum(r.warnings for r in results)
+    accepted = sum(r.accepted for r in results)
+    since = (f"<p class=\"muted\">New and Fixed: compared with the run of {html.escape(previous)} "
+             "(only the checks and books of both runs).</p>\n" if compared else "")
+    hidden = (f"<p class=\"muted\">{accepted} places you accepted earlier are hidden "
+              "(to show them again: the Accepted button in the window).</p>\n" if accepted else "")
     body = (f"<h1>{html.escape(project)}</h1>\n"
             f"<p class=\"muted\">Checked {datetime.now():%Y-%m-%d %H:%M}. "
             f"Errors: {errors}, warnings: {warnings}. Click a check to see its problems.</p>\n"
-            + _first_stages_note(results) +
+            + since + hidden + _first_stages_note(results) +
             f"<p><a href=\"{TXT_FOLDER}/\">Open the folder of text reports (txt)</a> "
             f"<span class=\"muted\">&middot; <a class=\"muted\" href=\"{HTML_FOLDER}/\">html</a></span></p>\n"
             f"<p class=\"muted desc\">{html.escape(location_help)}</p>\n"
             "<div class=\"scroll\"><table>\n<thead><tr><th>Check</th><th class=\"n\">Errors</th>"
-            "<th class=\"n\">Warnings</th><th class=\"n\">Different problems</th><th></th></tr></thead>\n"
+            "<th class=\"n\">Warnings</th><th class=\"n\">Different problems</th>"
+            + ("<th class=\"n\">New</th><th class=\"n\">Fixed</th>" if compared else "")
+            + "<th></th></tr></thead>\n"
             f"<tbody>\n{rows}\n</tbody>\n</table></div>")
     path = report_dir / "index.html"
     path.write_text(_page(f"{project} checks", body), encoding="utf-8")
@@ -277,24 +354,30 @@ def write_check_page(report_dir: Path, project: str, result: CheckResult, locati
                 + (f"<p class=\"desc\">{html.escape(result.note)}</p>\n" if result.note else "")
                 + "<div class=\"tools\"><input type=\"search\" id=\"search\" placeholder=\"Search in this report\">"
                   "<label><input type=\"checkbox\" id=\"errors-only\"> Errors only</label>"
+                + ("<label><input type=\"checkbox\" id=\"new-only\"> Only new</label>"
+                   if result.new else "")
+                + "<span class=\"muted\">Accept = not a problem: hidden in the next reports.</span>"
                   "<span class=\"muted\" id=\"info\"></span></div>\n"
                   "<div id=\"list\"></div>\n<button id=\"more\" type=\"button\" hidden>Show more</button>\n"
                   f"<script type=\"application/json\" id=\"data\">{data}</script>\n"
-                  f"<script>const PAGE = {PAGE_SIZE}; const LINK = {_link_json(link)};{SCRIPT}</script>")
+                  f"<script>const PAGE = {PAGE_SIZE}; const LINK = {_link_json(link, report_dir)}; "
+                  f"const CHECK = {json.dumps(result.name)};{SCRIPT}</script>")
     path = report_dir / HTML_FOLDER / f"{result.name}.html"
     path.write_text(_page(f"{result.name} - {project}", body), encoding="utf-8")
     return path
 
 
-def _link_json(link: dict[str, str] | None) -> str:
-    data = {"protocol": PROTOCOL, "project": "", "vrs": "", **(link or {})}
+def _link_json(link: dict[str, str] | None, run: Path | None = None) -> str:
+    """Data of the links: to Paratext (project, versification) and to accept a problem (the run folder, used when
+    the page is not opened from the disk)."""
+    data = {"protocol": PROTOCOL, "project": "", "vrs": "", "run": str(run.resolve()) if run else "", **(link or {})}
     return json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
 
 
 def write_html_report(report_dir: Path, project: str, results: list[CheckResult], location_help: str,
-                      link: dict[str, str] | None = None) -> Path:
+                      link: dict[str, str] | None = None, previous: str = "") -> Path:
     """Write index.html and one page per check; returns the path of index.html."""
     (report_dir / HTML_FOLDER).mkdir(parents=True, exist_ok=True)
     for result in results:
         write_check_page(report_dir, project, result, location_help, link)
-    return write_index(report_dir, project, results, location_help)
+    return write_index(report_dir, project, results, location_help, previous)

@@ -22,7 +22,7 @@ from checker.checks import (
     Finding,
     UsageCounter,
 )
-from checker import places
+from checker import history, places
 from checker.books import book_from_file_name, book_order
 from checker.html_report import HTML_FOLDER, TXT_FOLDER, CheckResult, Problem, write_html_report
 from checker.hyphenation import load_hyphenation
@@ -343,7 +343,15 @@ def group_problems(findings: Sequence[Finding]) -> list[list[Finding]]:
     return sorted(groups.values(), key=lambda group: (group[0].severity != ERROR, -len(group)))
 
 
-def write_problems(findings: list[Finding], out) -> None:
+def new_mark(group: Sequence[Finding], new: set | None) -> str:
+    """" (new)" when every place of a problem is new since the last run, " (new in 2 places)" for some."""
+    count = sum(history.finding_key(f) in new for f in group) if new else 0
+    if not count:
+        return ""
+    return " (new)" if count == len(group) else f" (new in {count} places)"
+
+
+def write_problems(findings: list[Finding], out, new: set | None = None) -> None:
     """Each distinct problem once, as a block of short lines: errors first, the most frequent first."""
     severity = None
     for number, group in enumerate(group_problems(findings), start=1):
@@ -351,7 +359,7 @@ def write_problems(findings: list[Finding], out) -> None:
         if first.severity != severity:
             severity = first.severity
             print(f"\n--- {SEVERITY_TITLES[severity]} ---", file=out)
-        print(f"\n{number}. {first.message}", file=out)
+        print(f"\n{number}. {first.message}{new_mark(group, new)}", file=out)
         if len(group) > 1:
             print(f"   Found: {len(group)} times", file=out)
         if first.context:
@@ -360,35 +368,41 @@ def write_problems(findings: list[Finding], out) -> None:
 
 
 def write_check(name: str, findings: list[Finding], unique: bool, out, skipped: dict[str, str] | None = None,
-                notes: dict[str, str] | None = None) -> None:
+                notes: dict[str, str] | None = None, change: history.Change | None = None) -> None:
+    """`change`: what is new since the last run (None = not compared)."""
     print(f"CHECK: {name}", file=out)
     print(CHECK_DESCRIPTIONS.get(name, ""), file=out)
     if skipped and name in skipped:
         print(skipped[name], file=out)
         return
     print(count_text(findings).capitalize(), file=out)
+    if change is not None:
+        print(f"Since the last run: {len(change.new)} new, {change.fixed} fixed.", file=out)
     if notes and name in notes:
         print(notes[name], file=out)
     if not findings:
         return
     print(LOCATION_HELP, file=out)
+    new = change.new if change else None
     if unique:
-        write_problems(findings, out)
+        write_problems(findings, out, new)
     else:
         print(file=out)
         for f in findings:
-            print(f.format(), file=out)
+            print(("NEW  " if new and history.finding_key(f) in new else "") + f.format(), file=out)
 
 
 def write_report(findings: list[Finding], checks: Sequence[str], unique: bool, out,
-                 skipped: dict[str, str] | None = None, notes: dict[str, str] | None = None) -> None:
+                 skipped: dict[str, str] | None = None, notes: dict[str, str] | None = None,
+                 changes: dict[str, history.Change] | None = None) -> None:
     """All the given checks one after another, with a total when there is more than one."""
     skipped = skipped or {}
+    changes = changes or {}
     selected = [(name, [f for f in findings if f.check == name]) for name in checks]
     for index, (name, group) in enumerate(selected):
         if index:
             print(f"\n{SEPARATOR}\n", file=out)
-        write_check(name, group, unique, out, skipped, notes)
+        write_check(name, group, unique, out, skipped, notes, changes.get(name))
     if len(selected) > 1:
         print(f"\n{SEPARATOR}\n\nTOTAL", file=out)
         for name, group in selected:
@@ -397,21 +411,33 @@ def write_report(findings: list[Finding], checks: Sequence[str], unique: bool, o
 
 
 def check_results(findings: Sequence[Finding], checks: Sequence[str],
-                  skipped: dict[str, str], notes: dict[str, str] | None = None) -> list[CheckResult]:
-    """Per check: counts and the grouped problems, for the HTML report and the window."""
+                  skipped: dict[str, str], notes: dict[str, str] | None = None,
+                  changes: dict[str, history.Change] | None = None,
+                  accepted: Counter[str] | None = None) -> list[CheckResult]:
+    """Per check: counts and the grouped problems, for the HTML report and the window.
+
+    `changes`: what is new since the last run per check (a check without an entry was not compared); `accepted`:
+    check -> number of accepted findings left out of `findings`.
+    """
+    changes = changes or {}
     results = []
     for name in checks:
         selected = [f for f in findings if f.check == name]
         errors = sum(f.severity == ERROR for f in selected)
+        change = changes.get(name)
+        new = change.new if change else set()
         problems = [Problem(group[0].severity, group[0].message, len(group), group[0].context.strip(),
-                            format_locations(group), group[0].item) for group in group_problems(selected)]
+                            format_locations(group), group[0].item,
+                            sum(history.finding_key(f) in new for f in group)) for group in group_problems(selected)]
         results.append(CheckResult(name, CHECK_DESCRIPTIONS.get(name, ""), errors, len(selected) - errors,
-                                   skipped.get(name, ""), problems, (notes or {}).get(name, "")))
+                                   skipped.get(name, ""), problems, (notes or {}).get(name, ""),
+                                   len(change.new) if change else None, change.fixed if change else None,
+                                   (accepted or {}).get(name, 0)))
     return results
 
 
 RUN_FOLDER_FORMAT = "%Y-%m-%d_%H-%M"  # one folder per run: <project>_report/2026-11-03_14-05/
-_RUN_FOLDER_RE = re.compile(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}(?:_\d+)?$")
+_RUN_FOLDER_RE = history.RUN_FOLDER_RE
 
 
 def new_run_folder(report_dir: Path) -> Path:
@@ -448,20 +474,40 @@ def latest_run(report_dir: Path) -> Path | None:
 
 
 def write_reports(project: Path, findings: list[Finding], checks: Sequence[str], report_dir: Path, unique: bool,
-                  skipped: dict[str, str], notes: dict[str, str] | None = None) -> list[CheckResult]:
-    """The reports in `report_dir` (the folder of one run): index.html, html/<check>.html and txt/<check>.txt."""
+                  skipped: dict[str, str], notes: dict[str, str] | None = None, books: Sequence[str] | None = None,
+                  errors_only: bool = False) -> list[CheckResult]:
+    """The reports in `report_dir` (the folder of one run): index.html, html/<check>.html, txt/<check>.txt and
+    findings.json (all findings, for the next run to compare with).
+
+    Findings accepted in an earlier report (accepted.json of the parent folder) are left out; what is new since the
+    previous run of the parent folder is marked. `books` = the --books of the run (None = all).
+    """
+    data = history.RunData(list(checks), sorted({b.upper() for b in books}) if books else None, errors_only,
+                           [name for name in checks if name in skipped],
+                           [history.finding_key(f) for f in findings])
+    previous = history.previous_run(report_dir.parent, report_dir)
+    previous_data = history.read_run_data(previous) if previous else None
+    changes = history.compare(previous_data, data) if previous_data else {}
+    history.write_run_data(report_dir, data)
+    findings, accepted = history.split_accepted(findings, history.read_accepted(report_dir.parent))
+    notes = dict(notes or {})
+    for name, count in accepted.items():
+        hidden = (f"{count} places you accepted earlier are hidden "
+                  "(to show them again: the Accepted button in the window).")
+        notes[name] = f"{notes[name]}\n{hidden}" if notes.get(name) else hidden
     txt_dir = report_dir / TXT_FOLDER
     txt_dir.mkdir(parents=True, exist_ok=True)
     for name in checks:
         selected = [f for f in findings if f.check == name]
         with (txt_dir / f"{name}.txt").open("w", encoding="utf-8") as out:
-            write_report(selected, [name], unique, out, skipped, notes)
-    results = check_results(findings, checks, skipped, notes)
+            write_report(selected, [name], unique, out, skipped, notes, changes)
+    results = check_results(findings, checks, skipped, notes, changes, accepted)
     # Links to Paratext name the project as Paratext windows do (Settings.xml <Name>), with its versification.
     settings_path = project / "Settings.xml"
     settings = load_settings(settings_path) if settings_path.is_file() else None
     link = {"project": settings.name or project.resolve().name, "vrs": settings.versification} if settings else None
-    write_html_report(report_dir, project.resolve().name, results, LOCATION_HELP, link)
+    write_html_report(report_dir, project.resolve().name, results, LOCATION_HELP, link,
+                      previous.name if previous_data else "")
     return results
 
 
@@ -485,12 +531,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.report_dir:
         run = new_run_folder(args.report_dir)
-        results = write_reports(args.project, findings, checks, run, args.unique, skipped, notes)
+        results = write_reports(args.project, findings, checks, run, args.unique, skipped, notes, args.books,
+                                args.errors_only)
         for result in results:
             counts = (f"     !  {short_reason(result.skipped)}" if result.skipped
                       else f"{result.errors:6} errors {result.warnings:7} warnings")
+            if result.new is not None:
+                counts += f"  +{result.new} new, -{result.fixed} fixed"
             print(f"{result.name:22} {counts}  -> {run / TXT_FOLDER / (result.name + '.txt')}")
         print(f"HTML report: {run / 'index.html'}")
+        # Accepted problems do not count.
+        return 1 if any(result.errors for result in results) else 0
     elif args.output:
         with args.output.open("w", encoding="utf-8") as out:
             write_report(findings, checks, args.unique, out, skipped, notes)

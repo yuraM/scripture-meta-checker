@@ -1201,7 +1201,7 @@ class ReportTest(unittest.TestCase):
             page = (run / "html" / "spelling.html").read_text(encoding="utf-8")
             self.assertTrue((run / "txt" / "spelling.txt").exists())
             self.assertEqual(sorted(p.name for p in report_dir.iterdir()), sorted([first.name, run.name, "notes.txt"]))
-            self.assertEqual(sorted(p.name for p in run.iterdir()), ["html", "index.html", "txt"])
+            self.assertEqual(sorted(p.name for p in run.iterdir()), ["findings.json", "html", "index.html", "txt"])
         self.assertEqual([(r.name, r.errors, len(r.problems)) for r in results], [("spelling", 2, 1), ("pairs", 0, 0)])
         self.assertIn('href="html/spelling.html"', index)
         self.assertIn('href="txt/spelling.txt"', index)
@@ -1306,7 +1306,85 @@ class ParatextLinkTest(unittest.TestCase):
             (Path(folder) / "html").mkdir()
             page = write_check_page(Path(folder), "P", result, "", {"project": "Abc", "vrs": "4"})
             text = page.read_text(encoding="utf-8")
-        self.assertIn('const LINK = {"protocol": "scripturechecker", "project": "Abc", "vrs": "4"}', text)
+        self.assertIn('const LINK = {"protocol": "scripturechecker", "project": "Abc", "vrs": "4", "run": ', text)
+        self.assertIn('const CHECK = "spelling";', text)
+
+
+class HistoryTest(unittest.TestCase):
+    """What is new since the last run; accepted problems."""
+
+    @staticmethod
+    def finding(ref: str, message: str = "word 'x'", check: str = "spelling", book: str = "MAT",
+                severity: str = ERROR):
+        from checker.model import Finding
+        return Finding(book, ref, severity, check, "x", message, "some text")
+
+    def test_compare(self):
+        from checker.history import RunData, compare
+        old = RunData(["spelling", "pairs", "quotes"], None, False, ["quotes"],
+                      [("spelling", "MAT", "1:1", "error", "a"), ("spelling", "MAT", "1:2", "error", "a"),
+                       ("pairs", "MRK", "2:1", "error", "b"), ("spelling", "LUK", "3:1", "error", "a")])
+        new = RunData(["spelling", "quotes", "usfm"], ["MAT", "MRK"], False, [],
+                      [("spelling", "MAT", "1:1", "error", "a"), ("spelling", "MAT", "1:5", "error", "a"),
+                       ("usfm", "MAT", "1:1", "error", "c")])
+        changes = compare(old, new)
+        # pairs and usfm are not in both runs, quotes could not run in the old one; LUK was not checked now.
+        self.assertEqual(set(changes), {"spelling"})
+        self.assertEqual(changes["spelling"].new, {("spelling", "MAT", "1:5", "error", "a")})
+        self.assertEqual(changes["spelling"].fixed, 1)
+        # A run with errors only: warnings of the other run are not compared.
+        warn = RunData(["spelling"], None, False, [], [("spelling", "MAT", "1:1", "warning", "w")])
+        self.assertEqual(compare(warn, RunData(["spelling"], None, True, [], []))["spelling"].fixed, 0)
+
+    def test_reports_mark_new_and_hide_accepted(self):
+        import json
+        import re
+        from checker.cli import new_run_folder, write_reports
+        from checker.history import accept, accepted_counts, clear_accepted, read_accepted
+        with tempfile.TemporaryDirectory() as folder:
+            report_dir = Path(folder) / "TST_report"
+            first = new_run_folder(report_dir)
+            write_reports(Path(folder) / "TST", [self.finding("1:1"), self.finding("1:2", "other")], ["spelling"],
+                          first, True, {})
+            run = new_run_folder(report_dir)
+            findings = [self.finding("1:1"), self.finding("1:3"), self.finding("2:1", "third", severity=WARNING)]
+            results = write_reports(Path(folder) / "TST", findings, ["spelling"], run, True, {})
+            self.assertEqual((results[0].new, results[0].fixed), (2, 1))
+            page = (run / "html" / "spelling.html").read_text(encoding="utf-8")
+            data = json.loads(re.search(r'id="data">(.*?)</script>', page, re.S).group(1))
+            self.assertEqual([(p["message"], p["count"], p["new"]) for p in data],
+                             [("word 'x'", 2, 1), ("third", 1, 1)])
+            self.assertIn('id="new-only"', page)
+            index = (run / "index.html").read_text(encoding="utf-8")
+            self.assertIn('<span class="new">+2</span>', index)
+            self.assertIn("(new in 1 places)", (run / "txt" / "spelling.txt").read_text(encoding="utf-8"))
+
+            # Accept a problem (all its places), as the link of the page does.
+            from urllib.parse import quote
+            link = (f"scripturechecker:accept?run={quote(str(run))}&check=spelling&severity=error"
+                    f"&message={quote(chr(119) + 'ord ' + chr(39) + 'x' + chr(39))}")
+            self.assertEqual(accept(link), "")
+            self.assertEqual(len(read_accepted(report_dir)), 2)
+            self.assertEqual(accept(link.replace("check=spelling", "check=pairs")),
+                             "This problem is not in the report of " + run.name + ".")
+            # A folder that is not a run of this program is never written to.
+            self.assertIn("not found", accept(f"scripturechecker:accept?run={quote(folder)}&check=spelling"))
+            # The next run leaves the accepted places out; they are not new and do not count.
+            third = new_run_folder(report_dir)
+            results = write_reports(Path(folder) / "TST", findings, ["spelling"], third, True, {})
+            self.assertEqual((results[0].errors, results[0].warnings, results[0].accepted), (0, 1, 2))
+            self.assertIn("2 places you accepted earlier are hidden", results[0].note)
+            self.assertEqual(results[0].new, 0)
+            # Undo, then clear one check / all.
+            self.assertEqual(accept(link + "&undo=1"), "")
+            self.assertEqual(read_accepted(report_dir), set())
+            accept(link)
+            accept(f"scripturechecker:accept?run={quote(str(run))}&check=spelling&severity=warning&message=third")
+            self.assertEqual(accepted_counts(report_dir), {"spelling": 3})
+            clear_accepted(report_dir, "pairs")
+            self.assertEqual(accepted_counts(report_dir), {"spelling": 3})
+            clear_accepted(report_dir)
+            self.assertFalse((report_dir / "accepted.json").exists())
 
 
 class DivineNameTest(unittest.TestCase):

@@ -6,6 +6,12 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
+- **New since the last run:** the report shows how many problems are new and how many were fixed since the
+  last run of the project (columns New and Fixed). New problems have a NEW mark, and the check page has a box
+  "Only new". Only checks and books that both runs checked are compared.
+- **Accept a problem:** each problem in the report has an **Accept** button (not a problem). The next reports
+  hide the problem in those places. **Undo** takes it back. The **Accepted** button in the window lists the
+  accepted problems by check: **Clear** shows the problems of one check again, **Clear all** shows all of them.
 - **"!" instead of 0:** when a check has nothing to check with (a file of the project is missing or empty, or the
   list in Paratext is empty, for example the Ordinal list or the quotation marks), the report shows a red **!** and
   the reason, not 0 problems.

@@ -170,6 +170,7 @@ wordlist/
 │   ├── version.py       # VERSION (window title, compared with the newest GitHub release)
 │   ├── updates.py       # is there a newer release on GitHub? (notice in the window; Update button swaps the exe)
 │   ├── paratext_link.py # report links (scripturechecker:...) -> Paratext shows the verse; URL protocol registration
+│   ├── history.py       # findings.json per run: new / fixed since the last run; accepted.json (Accept links)
 │   ├── icon.ico         # window and exe icon (16-256 px, transparent corners), made from `Open Book Icon.png` in the root
 │   └── cli.py           # argparse, report writer, summary
 ├── tests/test_checker.py
@@ -570,6 +571,21 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
   `html/`) are deleted; other files there are kept. The pages need no server and no internet; `</` in the JSON is
   escaped so problem text cannot end the script. The window has "Open report" and "Open txt folder" buttons for the
   newest run in the Reports folder (`cli.latest_run`, also a run made earlier).
+- **New since the last run and accepted problems** (user decisions 2026-11-13, `checker/history.py`): each run
+  folder gets `findings.json` (checks, `--books`, errors-only, checks not run, all findings). A finding is the same
+  when check, book, chapter:verse, severity and message are equal (not the context: it changes with nearby edits; a
+  verse that moves counts as new + fixed, accepted by the user). It is compared with the newest earlier run folder
+  that has `findings.json`, only checks of both runs (not "!") and books of both runs; errors-only in one run = errors
+  only. Shown: index columns New / Fixed, a `NEW` mark and an "Only new" box on the check page, `(new)` / `NEW` in
+  txt, `+N new, -N fixed` in the console and the window status. **Accept** (also errors: user decision, "things
+  happen"): a button on each problem of the HTML page opens `scripturechecker:accept?run=…&check=…&severity=…&message=…`
+  (`&undo=1` = Undo); `checker_app.py` hands it to `history.handle`, which writes all places of that problem to
+  `<report dir>/accepted.json` (one place per line; a lock file for two quick clicks). Only a run folder with
+  `findings.json` and a problem that is in it are written, so a link from another page cannot write elsewhere. A
+  problem found later in a new place is shown again. Accepted places are left out of the next reports and the exit
+  code (the note says how many). The page remembers its clicks in localStorage only for the look. The window button
+  **Accepted (N)** opens a list per check with **Clear** and **Clear all** (with a question; user wish: someone may
+  accept too much).
 
 ## Environment notes (Windows)
 
