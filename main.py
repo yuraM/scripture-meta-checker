@@ -35,6 +35,7 @@ CHECKS = [
     "ellipses",              # "..." among "…"
     "digit-systems",         # digits of another system than most numbers (۲۷ among 27)
     "fractions",             # 1/2 where the project writes 1⁄2
+    "sentence-numbers",      # a sentence or a quote starts with digits (… years. 430 years …)
     "normalization",         # NormalizationForm (NFC)
     "paragraph-final",       # last punctuation of a paragraph; headings ending with "."
     "ordinals",              # NumberOrdinals: "5-го", "8th", "ke-430"

@@ -61,6 +61,10 @@ CHECK_DESCRIPTIONS = {
                      "inside text of another language (Copyright 1985) are not shown.",
     "fractions": "A fraction written with a slash (1/2) when most fractions of the project use the fraction slash "
                  "⁄ (U+2044): 1⁄2.",
+    "sentence-numbers": "A sentence, or the words of a speaker, start with a number in digits (… they lived there. "
+                        "430 years later …). Write the number in words, or change the order of the words. A "
+                        "paragraph that starts with a number may have a verse number without \\v. Lists (\\li), "
+                        "tables, headings, notes and numbers after a dash are not counted.",
     "self-references": "A cross reference \\x that points to the verse it stands in.",
     "one-chapter-books": "References to books with one chapter (Obadiah, Philemon, 2 and 3 John, Jude) written two "
                          "ways: with the chapter (Jude 1:3) and without it (Jude 3). The rare way is shown.",

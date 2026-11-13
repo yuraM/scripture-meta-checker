@@ -10,7 +10,7 @@ from functools import lru_cache
 from checker import places
 from checker.forms import (
     check_all_caps, check_apostrophes, check_dashes, check_digit_systems, check_ellipses, check_fractions, check_heading_case,
-    check_marker_capitals, check_note_callers, check_untranslated,
+    check_marker_capitals, check_note_callers, check_sentence_numbers, check_untranslated,
 )
 from checker.verses import check_figures, check_glossary_words, check_repeated_text, check_verse_lengths
 from checker.poetry import (
@@ -1213,6 +1213,7 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "apostrophes": lambda usage, ctx: check_apostrophes(usage.segments, ctx),
     "digit-systems": lambda usage, ctx: check_digit_systems(usage.segments, ctx),
     "fractions": lambda usage, ctx: check_fractions(usage.segments, ctx),
+    "sentence-numbers": lambda usage, ctx: check_sentence_numbers(usage.segments, ctx),
     "line-ends": lambda usage, ctx: check_line_ends(usage.flow, usage.case_refs, ctx),
     "poetry-two-sentences": lambda usage, ctx: check_poetry_two_sentences(usage.poetry_lines, ctx),
     "poetry-long-lines": lambda usage, ctx: check_poetry_long_lines(usage.poetry_lines, ctx),

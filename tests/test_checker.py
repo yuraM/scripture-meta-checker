@@ -367,6 +367,20 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertIn("use a marker for capitals", found[3].message)
         self.assertNotIn("Elsewhere", found[3].message)  # ТЕКЕЛ is written nowhere else
 
+    def test_sentence_numbers(self):
+        from checker import forms
+        usfm = ("\\id TST\n\\c 1\n"
+                "\\p \\v 1 Вони жили там. 430 років минуло. Він сказав: «5 хлібів маємо». Було 12 кошиків.\n"
+                "\\p \\v 2 Дивіться 3:16 і \\xt 4:5\\xt*. Ось вони: — 50 000 верблюдів.\n"
+                "\\li1 \\v 3 337 500 овець;\n"
+                "\\p 21 Слово Господа прийшло.\n"
+                "\\p \\v 4 Сказано.\\f + \\fr 1:4 \\ft Інше. 7 рукописів.\\f*\n")
+        found = list(forms.check_sentence_numbers(self._poetry_usage(usfm).segments, self.ctx))
+        self.assertEqual([(f.item, f.ref) for f in found], [("430", "1:1"), ("5", "1:1"), ("21", "1:3")])
+        self.assertIn("a sentence starts", found[0].message)
+        self.assertIn("the words of a speaker start", found[1].message)
+        self.assertIn("mark it with \\v", found[2].message)
+
     def test_marker_capitals(self):
         from checker import forms
         usfm = ("\\id TST\n\\c 1\n\\p \\v 1 Написано:\n\\pc Вавилон великий,\n\\pc мати блудниць\n"

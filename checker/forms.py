@@ -326,3 +326,77 @@ def check_marker_capitals(segments: list[Segment], ctx: CheckContext) -> Iterato
         yield _finding(segment, match.start(), len(word), "marker-capitals", word,
                        f"the first word of the paragraph \\{segment.style} must start with a capital letter: "
                        f"write '{better}'")
+
+
+# --- sentence-numbers: a sentence or the words of a speaker start with a number in digits ---
+
+# Paragraphs of running text and poetry. Lists (\li, \lim, \lf), tables, headings and titles often start with a number
+# on purpose (NUM 31:36 "337,500 sheep"), so they are not checked.
+TEXT_PARAGRAPH_RE = re.compile(r"(p|m|po|pr|pc|pm[ocr]?|pi\d*|mi|nb|cls|q\d*|qm\d*|qc)$")
+SENTENCE_END_NAMES = ("FULL STOP", "EXCLAMATION MARK", "QUESTION MARK", "DANDA")
+NOT_TEXT_STYLES = frozenset({"xt", "fig"})  # numbers in these character styles are references or not text
+# A whole number for the message: 3,023 or 430 000 (space, no-break space U+00A0, narrow U+202F).
+WHOLE_NUMBER_RE = re.compile(r"\d+(?:[^\w\s]\d+|[ " + chr(0xA0) + chr(0x202F) + r"]\d{3})*")
+
+
+def _sentence_marks(ctx: CheckContext) -> frozenset[str]:
+    marks = set("".join(ctx.settings.sentence_final_punctuation)) or set(".!?")
+    return frozenset(ch for ch in marks if any(name in unicodedata.name(ch, "") for name in SENTENCE_END_NAMES))
+
+
+def _quote_openers(ctx: CheckContext) -> frozenset[str]:
+    return frozenset(ch for opener, _ in ctx.settings.quote_levels for ch in opener if not ch.isspace())
+
+
+def number_start(text: str, start: int, marks: frozenset[str], openers: frozenset[str],
+                 abbreviations: frozenset[str]) -> str:
+    """How the number at `start` starts something: "paragraph", "quote" (words of a speaker), "sentence" or ""."""
+    index, quoted = start, False
+    while index and (text[index - 1].isspace() or text[index - 1] in openers
+                     or unicodedata.category(text[index - 1]) == "Pi"):
+        quoted = quoted or not text[index - 1].isspace()
+        index -= 1
+    if not index:
+        return "quote" if quoted else "paragraph"
+    if quoted:
+        return "quote"
+    if index == start:  # no space before the number: 1:5, 2Ki
+        return ""
+    # After a sentence end, also after a closing quote or bracket: … it.» 430 …
+    while index and unicodedata.category(text[index - 1]) in ("Pf", "Pe") or (index and text[index - 1] in "\"'"):
+        index -= 1
+    if not index or text[index - 1] not in marks:
+        return ""
+    word = re.search(r"\w+$", text[:index - 1])
+    if word and f"{word.group()}{text[index - 1]}".lower() in abbreviations:
+        return ""  # гл. 5, v. 3
+    return "sentence"
+
+
+def check_sentence_numbers(segments: list[Segment], ctx: CheckContext) -> Iterator[Finding]:
+    marks, openers = _sentence_marks(ctx), _quote_openers(ctx)
+    separator = ctx.settings.chapter_verse_separator or ":"
+    for segment in segments:
+        if (segment.in_note or segment.book in PERIPHERAL_BOOKS
+                or not TEXT_PARAGRAPH_RE.match(segment.style)):
+            continue
+        text = segment.text
+        for match in NUMBER_RE.finditer(text):
+            start, end = match.span()
+            if start and text[start - 1].isdigit() or segment.styles_at(start) & NOT_TEXT_STYLES:
+                continue
+            if text.startswith(separator, end) and text[end + len(separator):end + len(separator) + 1].isdigit():
+                continue  # a reference: 3:16
+            kind = number_start(text, start, marks, openers, ctx.abbreviations)
+            if not kind:
+                continue
+            # 430 000 and 3,023: the whole number in the message
+            whole = WHOLE_NUMBER_RE.match(text, start).group()
+            if kind == "paragraph":
+                message = (f"the paragraph \\{segment.style} starts with the number '{whole}': if it is a verse "
+                           "number, mark it with \\v; else write the number in words")
+            else:
+                what = "the words of a speaker start" if kind == "quote" else "a sentence starts"
+                message = (f"{what} with the number '{whole}' in digits: write the number in words, or change the "
+                           "order of the words")
+            yield _finding(segment, start, len(whole), "sentence-numbers", whole, message)

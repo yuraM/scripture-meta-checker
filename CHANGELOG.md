@@ -6,6 +6,9 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
+- **New check sentence-numbers** (Unit 3, Numbers and spaces): a sentence or the words of a speaker start with a
+  number in digits ("… there. 430 years …"). A paragraph that starts with a number may have a verse number without
+  \v. Lists, tables and numbers after a dash are not counted.
 - **New since the last run:** the report shows how many problems are new and how many were fixed since the
   last run of the project (columns New and Fixed). New problems have a NEW mark, and the check page has a box
   "Only new". Only checks and books that both runs checked are compared.
