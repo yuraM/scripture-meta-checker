@@ -42,6 +42,8 @@ CHECKS = [
     "chapter-end-headings",  # a heading as the last line of a chapter
     "footnote-spaces",       # space at the end of a note, before a note, missing after \f*
     "outline-references",    # a reference in \io without \ior
+    "m-after-heading",       # \m right after a heading: \p
+    "duplicate-footnotes",   # the same note shortly before, without \cat dup\cat*
     "normalization",         # NormalizationForm (NFC)
     "paragraph-final",       # last punctuation of a paragraph; headings ending with "."
     "ordinals",              # NumberOrdinals: "5-го", "8th", "ke-430"

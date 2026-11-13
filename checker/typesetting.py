@@ -12,6 +12,11 @@ regular expressions; here each place is a warning that says what to change, the 
   always writes the note right after the word; a letter right after \\f* (a missing space).
 - outline-references: a reference in a book outline line (\\io) without \\ior … \\ior*.
 - chapter-end-headings: a heading (\\s, \\ms) as the last line of a chapter: it belongs after the next \\c.
+- m-after-heading: \\m (a paragraph that goes on from the text before) right after a heading: the heading
+  starts something new, so the paragraph is \\p.
+- duplicate-footnotes: a footnote with the same text as a footnote shortly before it (within DUP_DISTANCE
+  characters, about a page) without \\cat dup\\cat*. In typesetting, when both are on one page, the second note is
+  removed and its caller is the caller of the first one; \\cat dup\\cat* marks the notes for that.
 """
 from __future__ import annotations
 
@@ -237,3 +242,45 @@ def check_chapter_end_headings(sources: list[tuple[str, str]], ctx: CheckContext
             where = "the end of the book" if rest == len(markers) else "the end of the chapter"
             yield source.finding(start, start + len(name) + 1, "chapter-end-headings", title,
                                  f"the heading \\{name} '{title}' stands at {where}: move it after the next \\c")
+
+
+# --- m-after-heading ---
+
+HEADINGS_BEFORE_M = re.compile(r"(?:s\d*|ms\d*|mr|r|d)$")
+
+
+def check_m_after_heading(sources: list[tuple[str, str]], ctx: CheckContext) -> Iterator[Finding]:
+    for source in _sources(sources):
+        markers = [(m.group(1), m.start()) for m in PARAGRAPH_RE.finditer(source.text)
+                   if PARAGRAPH_MARKERS.match(m.group(1))]
+        for (before, _), (name, start) in zip(markers, markers[1:]):
+            if name == "m" and HEADINGS_BEFORE_M.match(before):
+                yield source.finding(start, start + 2, "m-after-heading", "\\m",
+                                     f"change '\\m' to '\\p': a paragraph right after a heading (\\{before}) is a new "
+                                     "paragraph, not one that goes on")
+
+
+# --- duplicate-footnotes ---
+
+DUP_DISTANCE = 7000  # characters of the file from one note to the next: about one printed page
+FOOTNOTE_RE = re.compile(r"\\f\s+\S+\s*((?:\\cat\s[^\\]*\\cat\*\s*)?)(?:\\fr\s[^\\]*)?(.*?)\\f\*", re.S)
+
+
+def check_duplicate_footnotes(sources: list[tuple[str, str]], ctx: CheckContext) -> Iterator[Finding]:
+    for source in _sources(sources):
+        last: dict[str, tuple[int, int]] = {}  # note text -> (start, end) of the last note with it
+        for match in FOOTNOTE_RE.finditer(source.text):
+            body = " ".join(match.group(2).split())
+            if not body:
+                continue
+            earlier = last.get(body)
+            last[body] = (match.start(), match.end())
+            if earlier is None or match.start() - earlier[1] > DUP_DISTANCE:
+                continue
+            if re.search(r"\bdup\b", match.group(1)):
+                continue
+            shown = re.sub(r"\\\+?[a-z]+\d*\*?\s?", "", body)
+            yield source.finding(match.start(), match.end(), "duplicate-footnotes", shown[:60],
+                                 f"the same note is at {source.book} {source.ref(earlier[0])}, shortly before: add '\\cat dup\\cat*' "
+                                 "after the caller (\\f + \\cat dup\\cat*\\fr …). When both notes are on one page, "
+                                 "typesetting removes this one and gives it the caller of the first")

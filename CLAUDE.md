@@ -285,6 +285,8 @@ wordlist/
 | `chapter-end-headings` (opt-in, Unit 2 > Markers and titles) | raw files (not front/back matter) | — | `\s#`/`\ms#` (with its `\r \mr \sr \sp`) as the last paragraph before `\c` or the end of the book. Repo projects: 0 (a safety net) |
 | `footnote-spaces` (opt-in, Unit 5 > Footnotes) | raw `\f`/`\fe` | — | a space at the end of a note (before `\f*`, also after an empty `\ft`); a space between a word and `\f` when ≥90% of ≥20 notes stand right after the word (not after a marker or `\v N`); a letter right after `\f*` when ≤10% of the notes are followed by a letter (scripts without spaces glue them). Repo projects: 0-4 |
 | `outline-references` (opt-in, Unit 5 > References) | raw `\io#` lines + ChapterVerseSeparator | — | `chapter:verse` (with its range) in an outline line outside `\ior … \ior*`. Repo projects: 0-7 (one project marks no outline; a broken `\ ior*` was found) |
+| `m-after-heading` (opt-in, Unit 2 > Markers and titles) | raw paragraph markers | — | `\m` right after `\s# \ms# \mr \r \d`: "change '\m' to '\p'" (user decision 2026-11-13, from the user menu). Repo projects: 0-5 (`\s1 The Beatitudes \m He said:`, `\s1 … \m \v 1`) |
+| `duplicate-footnotes` (opt-in, Unit 5 > Footnotes) | raw `\f … \f*` | — | a note with the same text (after `\fr`, spaces joined) as a note ≤7000 characters before it in the file (about a page, the window of the user menu) and no `dup` in its `\cat`: add `\cat dup\cat*` after the caller; typesetting removes the second note when both are on one page and gives its place the caller of the first (user decision 2026-11-13). Repo projects: 0-56; the project that marks `\cat dup` already gives 0 |
 | `fractions` (opt-in, Unit 3 > Numbers and spaces) | all segments, all books (`BAK` tables) | — | `1/2` when more fractions use `⁄` (U+2044); only first number < second (`587/6` is a year); a project that writes `/` is left alone; repo projects: 1 (`1/10` in BAK among 12 `⁄`) |
 | `footnote-quotes` (opt-in, Unit 5 > Footnotes) | raw `\f … \f*` (`\fq`) + verse texts | — | a word of `\fq` is not in the verse, the verses next to it or the verses of its `\fr` range; a word counts as found with another ending (the first letters but the last 3, at least 3) or inside a longer word (Ethiopic prefixes). Repo projects: 0-9 (`\fq` used for added text that is not in the verse, changed verses) |
 | `self-references` (opt-in, Unit 5 > References) | `\xt` inside `\x`/`\ex` (`XtReference.note`) | — | the cross reference includes its own verse (footnotes may: \"some manuscripts do not have verse 28\"); repo projects: 0-4 |
@@ -331,7 +333,7 @@ book in order, because a quote may span paragraphs and chapters. Design:
   are warnings marked "(in a footnote)".
 
 `unused`, `hyphenation`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `divine-name`, `numbers`, `footnotes`, `references`, `untranslated-verses`, `repeated-text`, `verse-lengths`, `glossary-words`, `figures`, `dashes`, `ellipses`,
-`heading-case`, `all-caps`, `marker-capitals`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `sentence-numbers`, `quote-spaces`, `digit-hyphens`, `marker-spaces`, `chapter-end-headings`, `footnote-spaces`, `outline-references`, `self-references`, `one-chapter-books`, `term-renderings`,
+`heading-case`, `all-caps`, `marker-capitals`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `sentence-numbers`, `quote-spaces`, `digit-hyphens`, `marker-spaces`, `chapter-end-headings`, `footnote-spaces`, `outline-references`, `m-after-heading`, `duplicate-footnotes`, `self-references`, `one-chapter-books`, `term-renderings`,
 `poetry-numbers`, `line-ends`, `poetry-two-sentences`, `poetry-long-lines`, `poetry-verse-inside`,
 `poetry-chapter-break`, `parallel-changes`,
 `parallel-differences`, `terms` and `term-lists` are project-level checks (`PROJECT_CHECKS`): they run once after
@@ -526,12 +528,11 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
 - **A Paratext user menu of regular expressions** (`userMenu*.txt` in the repo folder, ignored by git; read 2026-11-13,
   user request: "even replacements are warnings: change X to Y"). Taken (`checker/typesetting.py`): space between two
   quotation marks, hyphen-minus between digits, space before an end marker, spaces around notes, `\ior` in outlines,
-  heading at a chapter end. Already covered: `\fv` form (special-spaces), references in notes (usfm), "Or" without
+  heading at a chapter end, `\m` after a heading and repeated notes without `\cat dup` (both added on the user's request after the first measure). Already covered: `\fv` form (special-spaces), references in notes (usfm), "Or" without
   `\fqa` (footnotes), `\x` to one-chapter books (one-chapter-books), `\toc` from `\mt` (book-titles), dashes,
   suspect close quotes (tried and dropped 2026-11-12). Measured and left out: `\b` next to a heading (12-33 per
-  project) and `\m` after a heading (0-5, often on purpose: Biblica style choices), `\b` inside a list (~220:
-  genealogies), markers without a number (`\q` = `\q1` in USFM), a footnote repeated in its chapter (38-196: notes
-  like "Hebrew: Sheol" repeat; `\cat dup` is a print workflow). Not checks: conversions (USFM 2 to 3, tables, RTL,
+  project, a style choice), `\b` inside a list (~220: genealogies), markers without a number (`\q` = `\q1` in
+  USFM). Not checks: conversions (USFM 2 to 3, tables, RTL,
   Thai word breaks), counts, extracting lists.
 
 - Indonesian `ValidSentenceFinalPunctCapitalization` contains bare `. ! ?`, which disables the

@@ -77,6 +77,11 @@ CHECK_DESCRIPTIONS = {
                        "when the project nearly always writes the note right after the word; a word right after "
                        "\\f* with no space.",
     "outline-references": "A reference in a line of the book outline (\\io) that is not marked with \\ior ... \\ior*.",
+    "m-after-heading": "A paragraph \\m right after a heading. \\m goes on from the text before it, but after a "
+                       "heading a new paragraph starts: change \\m to \\p.",
+    "duplicate-footnotes": "A footnote with the same text as a note shortly before it (about one page), without "
+                           "\\cat dup\\cat*. When both notes are on one page, typesetting removes the second one and "
+                           "gives its place the caller of the first: \\cat dup\\cat* marks such notes.",
     "self-references": "A cross reference \\x that points to the verse it stands in.",
     "one-chapter-books": "References to books with one chapter (Obadiah, Philemon, 2 and 3 John, Jude) written two "
                          "ways: with the chapter (Jude 1:3) and without it (Jude 3). The rare way is shown.",

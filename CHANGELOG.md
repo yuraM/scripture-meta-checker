@@ -6,6 +6,9 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
+- **New checks m-after-heading and duplicate-footnotes:** \m right after a heading (change it to \p); a
+  footnote with the same text as a note shortly before it, without \cat dup\cat* (typesetting removes the second
+  note when both are on one page).
 - **Six new checks for typesetting** (all opt-in, each says what to change):
   quote-spaces (the space between two quotation marks, usually U+202F), digit-hyphens (10-12 where the project
   writes 10‑12), marker-spaces ('\nd Lord \nd*': the space goes after the end marker), chapter-end-headings

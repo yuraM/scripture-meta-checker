@@ -401,6 +401,13 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertEqual(sorted(found("footnote_spaces")), [("1:25", "\\f"), ("1:25", "\\f*"), ("1:25", "\\f*")])
         self.assertEqual(found("outline_references"), [("0:0", "1:1–17")])
         self.assertEqual(found("chapter_end_headings"), [("1:25", "Заголовок")])
+        sources = [("TST", "\\id TST\n\\c 1\n\\s1 Заголовок\n\\m \\v 1 Текст\\f + \\fr 1:1 \\ft Близько 2 л.\\f* і "
+                           "\\v 2 ще\\f + \\fr 1:2 \\ft Близько 2 л.\\f* і\\f + \\cat dup\\cat*\\fr 1:2 \\ft Близько 2 л.\\f*\n"
+                           "\\b\n\\m \\v 3 далі\\f + \\fr 1:3 \\ft Інше.\\f*\n")]
+        self.assertEqual(found("m_after_heading"), [("1:0", "\\m")])  # before \v 1; \b before the next \m
+        duplicates = list(typesetting.check_duplicate_footnotes(sources, self.ctx))
+        self.assertEqual([f.ref for f in duplicates], ["1:2"])  # the third note has \cat dup already
+        self.assertIn("at TST 1:1", duplicates[0].message)
 
     def test_marker_capitals(self):
         from checker import forms

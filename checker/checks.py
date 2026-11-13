@@ -9,7 +9,8 @@ from functools import lru_cache
 
 from checker import places
 from checker.typesetting import (
-    check_chapter_end_headings, check_digit_hyphens, check_footnote_spaces, check_marker_spaces,
+    check_chapter_end_headings, check_digit_hyphens, check_duplicate_footnotes, check_footnote_spaces,
+    check_m_after_heading, check_marker_spaces,
     check_outline_references, check_quote_spaces,
 )
 from checker.forms import (
@@ -1224,6 +1225,8 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "footnote-spaces": lambda usage, ctx: check_footnote_spaces(usage.sources, ctx),
     "outline-references": lambda usage, ctx: check_outline_references(usage.sources, ctx),
     "chapter-end-headings": lambda usage, ctx: check_chapter_end_headings(usage.sources, ctx),
+    "m-after-heading": lambda usage, ctx: check_m_after_heading(usage.sources, ctx),
+    "duplicate-footnotes": lambda usage, ctx: check_duplicate_footnotes(usage.sources, ctx),
     "line-ends": lambda usage, ctx: check_line_ends(usage.flow, usage.case_refs, ctx),
     "poetry-two-sentences": lambda usage, ctx: check_poetry_two_sentences(usage.poetry_lines, ctx),
     "poetry-long-lines": lambda usage, ctx: check_poetry_long_lines(usage.poetry_lines, ctx),
