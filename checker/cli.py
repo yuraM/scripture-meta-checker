@@ -30,7 +30,7 @@ from checker.languages import PROFILES, profile_for
 from checker.parallels import PARALLEL_FILE, load_parallel_status
 from checker.settings import load_settings
 from checker.spelling import SpellingList, load_spelling_status
-from checker.stages import STAGES, in_stage_order, stage_checks
+from checker.stages import STAGES, in_stage_order, stage_checks, whole_project
 from checker.structure import NumberForms, book_name_words
 from checker.terms import load_terms
 from checker.usfm import parse_usfm
@@ -65,6 +65,19 @@ CHECK_DESCRIPTIONS = {
                         "430 years later …). Write the number in words, or change the order of the words. A "
                         "paragraph that starts with a number may have a verse number without \\v. Lists (\\li), "
                         "tables, headings, notes and numbers after a dash are not counted.",
+    "numbers-in-verse": "A number written with digits in a verse that other translations do not have in that verse "
+                     "(265 years where they have 365). A typing error, a number copied from the verse before, or a "
+                     "number of another manuscript? The numbers of an English translation are kept in the program "
+                     "(only numbers); the numbers of its notes count too. Numbers written with words are not read.",
+    "numbers-in-notes": "A number in a note that the notes and the text of an English translation do not have in "
+                    "that verse (444,000 litres where it has 440,000; 1 metre 8 cm where it has 1.8 m). Only verses "
+                    "where both have a note with numbers. Not listed: numbers below 10, verse numbers of the chapter, "
+                    "the same number in another unit (3,400 kg = 3.4 t). Years and the project's own measures are "
+                    "listed: check them once.",
+    "us-measures": "A note gives the number of a US measure where an English translation gives a US and a metric "
+                   "number ('about 25 tons or about 23 metric tons'). A US ton is 907 kg, so the note should say 23 "
+                   "tons: always listed. Feet, pounds and other US measures are listed only when the project gives "
+                   "the metric number in most other notes.",
     "quote-spaces": "Two quotation marks of different levels next to each other (” and ’) with another space between "
                     "them than the project nearly always uses there (usually a narrow no-break space U+202F).",
     "digit-hyphens": "A hyphen-minus between two numbers (10-12) where the project nearly always writes another sign "
@@ -79,14 +92,18 @@ CHECK_DESCRIPTIONS = {
     "outline-references": "A reference in a line of the book outline (\\io) that is not marked with \\ior ... \\ior*.",
     "m-after-heading": "A paragraph \\m right after a heading. \\m goes on from the text before it, but after a "
                        "heading a new paragraph starts: change \\m to \\p.",
+    "list-markers": "The lines around a list or a letter put the wrong way round: \\lh is the line before a list "
+                    "and \\lf the line after it, in the same chapter; \\pmo opens a letter (embedded text) and \\pmc "
+                    "closes it. Also a poetry line (\\q2) or a paragraph (\\pi1) among the lines of a list.",
     "duplicate-footnotes": "A footnote with the same text as a note shortly before it (about one page), without "
                            "\\cat dup\\cat*. When both notes are on one page, typesetting removes the second one and "
                            "gives its place the caller of the first: \\cat dup\\cat* marks such notes.",
     "self-references": "A cross reference \\x that points to the verse it stands in.",
     "one-chapter-books": "References to books with one chapter (Obadiah, Philemon, 2 and 3 John, Jude) written two "
                          "ways: with the chapter (Jude 1:3) and without it (Jude 3). The rare way is shown.",
-    "term-renderings": "A rendering in Paratext Biblical Terms with more than 5 words. A rendering is a word or a "
-                       "short phrase; if a clause translates the term, mark the verse OK without a rendering.",
+    "term-renderings": "Renderings in Paratext Biblical Terms that are not found anywhere in the text (all books: a "
+                       "typing mistake or an old rendering), and renderings with more than 5 words. A rendering is a "
+                       "word or a short phrase; if a clause translates the term, mark the verse OK without a rendering.",
     "poetry-numbers": "A number written with digits (12, or the digits of another script) in a poetry line "
                       "\\q, \\q1, \\q2. Poetry usually writes numbers in words. References (40:8) are not counted.",
     "footnote-quotes": "A footnote quotes the verse (\\fq), but a word of the quote is not in the verse: the quote or the verse was changed. Words with another ending count as found.",
@@ -140,8 +157,12 @@ CHECK_DESCRIPTIONS = {
                       "project settings use it (numbers, reference marks). An abbreviation that the Abbreviations "
                       "list writes with ~ (the normal no-break space) is written the same way in the text. Between "
                       f"verse numbers after an abbreviation the marks come from {places.REFERENCE_FORMAT}.",
-    "hyphenation": f"The list of word breaks {HYPHENATION_FILE} (Paratext Wordlist, column Hyphenation). "
-                   "The sign = is a place where a line may break. The sign * means a person checked the entry.",
+    "hyphenation-list": f"The list of word breaks {HYPHENATION_FILE} itself (Paratext Wordlist, column "
+                        "Hyphenation): breaks against the rules, entries that no person checked, and words that break "
+                        "the same start or end another way than most words. The sign = is a place where a line may "
+                        "break. The sign * means a person checked the entry.",
+    "hyphenation": f"Words of the text in the list of word breaks {HYPHENATION_FILE}: words that are not in the "
+                   "list, and long words with no places to break them.",
     "lists": "Paratext Wordlist, the checking inventories and the word breaks list must not disagree with each other. "
              "R = the word is right, W = the word is wrong.",
     "approvals": "Entries that a person marked correct (or wrong) in Paratext, but that look wrong: maybe they were "
@@ -166,7 +187,7 @@ CHECK_DESCRIPTIONS = {
                             "only a few words. Often this is on purpose, because the original texts are different too.",
     "terms": "Biblical terms (Paratext Tools > Biblical Terms). Only clear cases are listed: a term is translated the "
              "same way in almost all its verses, but in this verse none of its renderings is found. Maybe the verse "
-             "uses another word or has a typo. Also renderings that are not found anywhere in the text.",
+             "uses another word or has a typo.",
     "term-lists": "The Biblical Terms lists themselves: verses marked OK without a rendering where the rendering is "
                   "there now, or where the term does not occur; renderings guessed by Paratext that no person "
                   "checked.",
@@ -230,8 +251,9 @@ def missing_sources(ctx: CheckContext) -> dict[str, str]:
             reasons[name] = (f"Not checked: the {places.WORDLIST} is empty (SpellingStatus.xml is missing in the "
                              "project folder or has no words).")
     if no_hyphenation:
-        reasons["hyphenation"] = (f"Not checked: {HYPHENATION_FILE} is missing or has no words (Paratext "
-                                  f"{places.WORDLIST}, column Hyphenation).")
+        for name in ("hyphenation", "hyphenation-list"):
+            reasons[name] = (f"Not checked: {HYPHENATION_FILE} is missing or has no words (Paratext "
+                             f"{places.WORDLIST}, column Hyphenation).")
     if no_wordlist and no_hyphenation:
         reasons["lists"] = f"Not checked: the {places.WORDLIST} and {HYPHENATION_FILE} are both empty or missing."
     if not settings.valid_characters and not settings.invalid_characters:
@@ -285,6 +307,9 @@ def run_checks(
         ctx.terms, ctx.terms_problem = load_terms(project, settings.biblical_terms_list, settings.versification)
     wanted = {code.upper() for code in books} if books else None
     usage = UsageCounter()
+    # Checks of the whole project (Unit 1: the lists) count all books, also with --books. A second counter is
+    # needed only then; without --books both are the same.
+    whole = UsageCounter() if wanted and any(whole_project(name) for name in checks) else usage
 
     pattern = f"{settings.file_name_pre_part}*{settings.file_name_post_part}"
     sources = [(path, path.read_text(encoding="utf-8-sig")) for path in sorted(project.glob(pattern))]
@@ -304,7 +329,12 @@ def run_checks(
         other_file = file_of_book.setdefault(book, path.name)
         # Every book is indexed, so references into books outside --books can be resolved.
         usage.add_source(book, content, ctx, with_references=not wanted or book in wanted)
+        if whole is not usage:
+            whole.add_source(book, content, ctx)
         if wanted and book not in wanted:
+            if whole is not usage:
+                for segment in segments:
+                    whole.add(ctx.analyse(segment), ctx)
             continue
         if other_file != path.name and "usfm" in checks:
             yield Finding(book, "0:0", ERROR, "usfm", f"{book} {path.name}",
@@ -318,6 +348,8 @@ def run_checks(
             analysis = ctx.analyse(segment)
             analyses.append(analysis)
             usage.add(analysis, ctx)
+            if whole is not usage:
+                whole.add(analysis, ctx)
             for name in checks:
                 if name in CHECKS and name not in ctx.skipped:
                     yield from CHECKS[name](analysis, ctx)
@@ -329,7 +361,7 @@ def run_checks(
         progress(len(sources), len(sources) + 1, "checks of the whole project")
     for name in checks:
         if name in PROJECT_CHECKS and name not in ctx.skipped:
-            yield from PROJECT_CHECKS[name](usage, ctx)
+            yield from PROJECT_CHECKS[name](whole if whole_project(name) else usage, ctx)
     if progress:
         progress(len(sources) + 1, len(sources) + 1, "done")
 

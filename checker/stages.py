@@ -9,14 +9,16 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Unit 1. Project settings and lists", ("lists", "approvals", "term-lists", "term-renderings")),
+    ("Unit 1. Project settings and lists (all books)",
+     ("lists", "approvals", "hyphenation-list", "term-lists", "term-renderings", "unused")),
     ("Unit 2. File structure",
      ("usfm", "book-titles", "glossary-words", "figures", "marker-spaces", "chapter-end-headings",
-      "m-after-heading", "untranslated-verses", "repeated-text", "verse-lengths",
+      "m-after-heading", "list-markers", "untranslated-verses", "repeated-text", "verse-lengths",
       "normalization", "special-spaces")),
     ("Unit 3. Characters and punctuation",
      ("characters", "scripts", "apostrophes", "punctuation", "paragraph-final", "dashes", "ellipses", "quotes", "pairs",
-      "quote-spaces", "spacing", "numbers", "digit-systems", "fractions", "digit-hyphens", "sentence-numbers")),
+      "quote-spaces", "spacing", "numbers", "digit-systems", "fractions", "digit-hyphens", "sentence-numbers",
+      "numbers-in-verse", "numbers-in-notes", "us-measures")),
     ("Unit 4. Words",
      ("spelling", "hyphenation", "mixed-capitalization", "capitalization", "heading-case", "all-caps", "marker-capitals", "repeated-words",
       "ordinals")),
@@ -26,22 +28,24 @@ STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
       "parallel-changes", "parallel-differences")),
     ("Unit 6. Review lists", ("variants", "name-case", "styled-words", "divine-name",
                              "poetry-numbers", "line-ends", "poetry-two-sentences", "poetry-long-lines",
-                             "poetry-verse-inside", "poetry-chapter-break", "unused")),
+                             "poetry-verse-inside", "poetry-chapter-break")),
 )
 # Groups inside a unit (unit number, title, checks in the order to fix their problems): the window shows them
 # folded, the reports under their own heading. Their checks are also in STAGES, next to each other.
 GROUPS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
-    (1, "Wordlist and inventories", ("lists", "approvals")),
+    (1, "Wordlist and inventories", ("lists", "approvals", "hyphenation-list")),
     (1, "Biblical terms lists", ("term-lists", "term-renderings")),
+    (1, "Unused list entries", ("unused",)),
     (2, "Markers and titles", ("usfm", "book-titles", "glossary-words", "figures", "marker-spaces",
-                               "chapter-end-headings", "m-after-heading")),
+                               "chapter-end-headings", "m-after-heading", "list-markers")),
     (2, "Verse text", ("untranslated-verses", "repeated-text", "verse-lengths")),
     (2, "Invisible characters", ("normalization", "special-spaces")),
     (3, "Characters", ("characters", "scripts", "apostrophes")),
     (3, "Punctuation", ("punctuation", "paragraph-final", "dashes", "ellipses")),
     (3, "Quotes and brackets", ("quotes", "pairs", "quote-spaces")),
     (3, "Numbers and spaces", ("spacing", "numbers", "digit-systems", "fractions", "digit-hyphens",
-                               "sentence-numbers")),
+                               "sentence-numbers", "numbers-in-verse", "numbers-in-notes",
+                               "us-measures")),
     (4, "Spelling and word breaks", ("spelling", "hyphenation")),
     (4, "Capital letters", ("mixed-capitalization", "capitalization", "heading-case", "all-caps",
                                          "marker-capitals")),
@@ -57,8 +61,11 @@ GROUPS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
     (6, "Divine name and styles", ("styled-words", "divine-name")),
     (6, "Poetry and lists", ("poetry-numbers", "line-ends", "poetry-two-sentences", "poetry-long-lines",
                    "poetry-verse-inside", "poetry-chapter-break")),
-    (6, "Unused list entries", ("unused",)),
 )
+
+# The stage whose checks always read all books (they check the lists of the project): with chosen books the
+# other stages check only those books.
+WHOLE_PROJECT_STAGE = 1
 
 # Stages whose errors are named at the top of the report: fix them before the others.
 FIRST_STAGES = 2
@@ -67,6 +74,11 @@ FIRST_STAGES = 2
 def group_of(check: str) -> str:
     """Title of the group of `check`; "" = in no group."""
     return next((title for _, title, checks in GROUPS if check in checks), "")
+
+
+def whole_project(check: str) -> bool:
+    """True when `check` always reads all books (the lists of the project), also when books are chosen."""
+    return stage_number(check) == WHOLE_PROJECT_STAGE
 
 
 def stage_number(check: str) -> int:

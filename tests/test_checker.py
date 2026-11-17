@@ -77,6 +77,21 @@ class TempProjectMixin:
         return [f for segment in parse_usfm(usfm, "TST") for f in CHECKS[name](self.ctx.analyse(segment), self.ctx)]
 
 
+class ChosenBooksTest(TempProjectMixin, unittest.TestCase):
+    def test_whole_project_checks_read_all_books(self):
+        from checker.cli import run_checks
+        (self.root / "08RUTtest.SFM").write_text("\\id RUT\n\\c 1\n\\p \\v 1 Слово помилка.\n", encoding="utf-8")
+        (self.root / "45ROMtest.SFM").write_text("\\id ROM\n\\c 1\n\\p \\v 1 Аарона помилка.\n",
+                                                 encoding="utf-8")
+        findings = list(run_checks(self.root, ["spelling", "unused"], ["RUT"]))
+        self.assertEqual({f.book for f in findings if f.check == "spelling"}, {"RUT"})  # only the chosen book
+        unused = {f.item for f in findings if f.check == "unused"}
+        self.assertNotIn("аарона", unused)  # used in ROM: Unit 1 reads all books
+        self.assertIn("господь", unused)
+        everything = list(run_checks(self.root, ["unused"], None))
+        self.assertEqual(unused, {f.item for f in everything})
+
+
 class SettingsTest(TempProjectMixin, unittest.TestCase):
     def test_split_list_keeps_unicode_spaces_and_decodes_escapes(self):
         self.assertEqual(split_list(" a \n  !\\0020– "), ("a", " ", "! –"))
@@ -328,6 +343,50 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
             found = list(verses.check_verse_lengths(texts, set(), lambda key: key, self.ctx))
         self.assertEqual([(f.ref, f.item) for f in found], [("1:7", "much shorter"), ("1:8", "much longer")])
 
+    def test_verse_numbers(self):
+        from collections import Counter
+        from unittest import mock
+        from checker import verse_numbers
+        from checker.footnotes import Note
+        self.assertEqual([v for _, _, v in verse_numbers.numbers_of("1,51,450 і 6 720, 3:16, H12, 1⁄2, 1,260ን", ",",
+                                                                   hindi_urdu=True)], [151450, 6720, 1260])
+        self.assertEqual([v for _, _, v in verse_numbers.numbers_of("4,5 т і 12, 15", " ")], [4.5, 12, 15])
+        base = verse_numbers.BaseNumbers()
+        for verse in range(1, 30):
+            base.text[("TST", 1, verse)] = Counter([10.0])
+        base.text[("TST", 1, 2)] = Counter([365.0])
+        base.text[("TST", 1, 3)] = Counter([245.0, 245.0])   # the base translation has it twice here …
+        base.text[("TST", 1, 5)] = Counter([25000.0])
+        base.notes[("TST", 1, 5)] = {2.7}                    # … a measure: own measures are not listed
+        base.pairs[("TST", 1, 6)] = [("t", 25.0, 23.0)]
+        base.pairs[("TST", 1, 7)] = [("f", 30.0, 9.0)]
+        texts = {("TST", 1, verse): "10 днів" for verse in range(1, 30)}
+        texts[("TST", 1, 2)] = "265 років"                   # typing error
+        texts[("TST", 1, 3)] = "245 співаків"
+        texts[("TST", 1, 4)] = "10 днів і 245 мулів"         # verses divided another way
+        texts[("TST", 1, 5)] = "2,500 ліктів і 12 метрів"
+        with mock.patch.object(verse_numbers, "read_verse_numbers", return_value=base):
+            found = list(verse_numbers.check_numbers_in_verse(texts, set(), lambda key: key, self.ctx))
+            self.assertEqual([(f.ref, f.item) for f in found], [("1:2", "265"), ("1:5", "2,500")])
+            notes = [Note("TST", "1:6", (("ft", "Близько 25 т."),), ""), Note("TST", "1:7", (("ft", "30 футів"),), "")]
+            notes += [Note("TST", f"1:{v}", (("ft", "23 т"),), "") for v in range(8, 12)]
+            base.pairs.update({("TST", 1, v): [("t", 25.0, 23.0)] for v in range(8, 12)})
+            found = list(verse_numbers.check_us_measures(notes, lambda key: key, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in found], [("1:6", "25")])   # feet: the project's choice
+        base = verse_numbers.BaseNumbers()
+        for verse in range(1, 8):
+            base.text[("TST", 1, verse)] = Counter()
+            base.notes[("TST", 1, verse)] = {1.8, 440000.0, 3.4, 1.0}
+        notes = [Note("TST", "1:1", (("ft", "Близько 444 000 л."),), ""),          # one digit wrong
+                 Note("TST", "1:2", (("ft", "1 метр 8 см завширшки."),), ""),     # 1.08, not 1.8
+                 Note("TST", "1:3", (("ft", "1 метр 80 см; 3 400 кг."),), ""),    # the same numbers, other units
+                 Note("TST", "1:4", (("ft", "Близько 1 л; також у вірші 7."),), ""),  # a verse of the chapter
+                 Note("TST", "1:5", (("ft", "У 586 р. до н. е."),), "")]           # a year: listed
+        verses = {"TST": {1: set(range(1, 30))}}
+        with mock.patch.object(verse_numbers, "read_verse_numbers", return_value=base):
+            found = list(verse_numbers.check_numbers_in_notes(notes, {}, verses, lambda key: key, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in found], [("1:1", "444 000"), ("1:2", "1 метр 8"), ("1:5", "586")])
+
     def test_glossary_and_figures(self):
         from checker.verses import check_figures, check_glossary_words
         sources = [("GLO", "\\id GLO\n\\p \\k Месія\\k* – Помазаник.\n\\p \\k Субота\\k* – день."),
@@ -408,6 +467,21 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         duplicates = list(typesetting.check_duplicate_footnotes(sources, self.ctx))
         self.assertEqual([f.ref for f in duplicates], ["1:2"])  # the third note has \cat dup already
         self.assertIn("at TST 1:1", duplicates[0].message)
+        sources = [("TST", "\\id TST\n\\c 1\n"
+                           "\\lh \\v 1 Сини:\n\\s2 Заголовок\n\\li1 Рувим\n\\li1 Симеон\n\\lf \\v 2 Це сини.\n"  # right
+                           "\\q1 \\v 3 Пісня\n\\lf \\v 4 Сини Хама:\n\\b\n\\li1 Куш\n\\lh \\v 5 Це сини Хама.\n"  # swapped
+                           "\\p \\v 6 Текст\n\\lh \\v 7 Сини Сима:\n\\lf \\v 8 Це сини Сима.\n"  # no list between
+                           "\\lh \\v 9 Ось вони: \\zli1 Елам, \\zli1 Ашшур.\n\\p \\v 10 Текст\n"  # own list markers
+                           "\\pmo \\v 11 Від царя\n\\p \\v 12 Текст\n"  # \pmo before \p: left alone
+                           "\\pmc \\v 13 Привіт\n\\pm Лист\n\\pmo Бувайте\n\\p \\v 14 Текст\n"  # swapped
+                           "\\li1 \\v 15 Сини Раами:\n\\q2 Шева й Дедан.\n"  # poetry inside a list
+                           "\\li1 \\v 16 Міста:\n\\pi1 Хеврон\n\\li1 Лівна\n"  # a paragraph inside a list
+                           "\\c 2\n\\lf \\v 1 Це міста.\n\\p \\v 2 Текст.\n")]  # \lf at the start of a chapter
+        self.assertEqual([(f.ref, f.item, f.message[:20]) for f in typesetting.check_list_markers(sources, self.ctx)],
+                         [("1:3", "\\lf", "change '\\lf' to '\\lh"), ("1:4", "\\lh", "change '\\lh' to '\\lf"),
+                          ("1:6", "\\lh", "no list between \\lh "), ("1:12", "\\pmc", "change '\\pmc' to '\\p"),
+                          ("1:13", "\\pmo", "change '\\pmo' to '\\p"), ("1:15", "\\q2", "a poetry line \\q2 ri"),
+                          ("1:16", "\\pi1", "a paragraph \\pi1 bet"), ("2:0", "\\lf", "\\lf at the start of ")])
 
     def test_marker_capitals(self):
         from checker import forms
@@ -645,7 +719,9 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
             usage.verse_texts[("MAT", 1, verse)] = text
         usage.words.update(["на", "землі", "у", "краю"])
         terms = list(PROJECT_CHECKS["terms"](usage, ctx))
-        self.assertEqual([(f.ref, f.item) for f in terms], [("1:7", "γῆ"), ("(renderings)", "cуш")])
+        self.assertEqual([(f.ref, f.item) for f in terms], [("1:7", "γῆ")])
+        renderings = list(PROJECT_CHECKS["term-renderings"](usage, ctx))
+        self.assertEqual([(f.ref, f.item) for f in renderings], [("(renderings)", "cуш")])  # found nowhere
         self.assertIn("19 of its 20 verses", terms[0].message)
         lists = list(PROJECT_CHECKS["term-lists"](usage, ctx))
         # The guessed term is not in the project list: Paratext does not show it, so it is not reported.
@@ -1150,6 +1226,11 @@ class HyphenationTest(TempProjectMixin, unittest.TestCase):
         findings = list(check_hyphenation(usage, ctx))
         self.assertIn(("missing", "інше"), {(f.ref, f.item) for f in findings})
         self.assertIn("'розповідати' is a long word with no places to break it", {f.message for f in findings})
+        self.assertEqual({f.check for f in findings}, {"hyphenation"})  # the rules of the list are hyphenation-list
+        from checker.checks import check_hyphenation_list
+        rules = list(check_hyphenation_list(usage, ctx))
+        self.assertTrue(rules and {f.check for f in rules} == {"hyphenation-list"})
+        self.assertFalse({f.ref for f in rules} & {"missing"})
         unused = {f.item for f in check_unused(usage, ctx) if f.book == "hyphenatedWords.txt"}
         self.assertIn("бачитимуть", unused)
         self.assertNotIn("слово", unused)
@@ -1196,7 +1277,11 @@ class ReportTest(unittest.TestCase):
         from checker.stages import STAGES, in_stage_order, stage_checks
         staged = [name for _, names in STAGES for name in names]
         self.assertEqual(sorted(staged), sorted({*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS, *PROJECT_CHECKS}))
-        self.assertEqual(in_stage_order(["unused", "spelling", "lists", "spelling"]), ["lists", "spelling", "unused"])
+        self.assertEqual(in_stage_order(["variants", "spelling", "lists", "spelling"]),
+                         ["lists", "spelling", "variants"])
+        from checker.stages import whole_project
+        self.assertEqual([n for n in staged if whole_project(n)], list(STAGES[0][1]))
+        self.assertTrue(whole_project("unused") and whole_project("hyphenation-list"))
         self.assertEqual(stage_checks([2]), list(STAGES[1][1]))
         from checker.stages import GROUPS, group_of
         for unit, title, names in GROUPS:  # a group's checks are in its unit, in the same order
@@ -1376,6 +1461,9 @@ class HistoryTest(unittest.TestCase):
         self.assertEqual(changes["spelling"].new, {("spelling", "MAT", "1:5", "error", "a")})
         self.assertEqual(changes["spelling"].fixed, 1)
         # A run with errors only: warnings of the other run are not compared.
+        # A check of the whole project reads all books in both runs: its findings are compared in every book.
+        lists = RunData(["term-lists"], ["MAT"], False, [], [("term-lists", "ROM", "1:1", "warning", "t")])
+        self.assertEqual(compare(lists, RunData(["term-lists"], ["MRK"], False, [], []))["term-lists"].fixed, 1)
         warn = RunData(["spelling"], None, False, [], [("spelling", "MAT", "1:1", "warning", "w")])
         self.assertEqual(compare(warn, RunData(["spelling"], None, True, [], []))["spelling"].fixed, 0)
 

@@ -256,7 +256,6 @@ def check_terms(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
         f"words that are translated in many ways (write, believe, forever); see them in Paratext {PLACE}. "
         f"Also not checked: verses marked OK without a rendering"
         + (f", {guessed} terms with a rendering guessed by Paratext (see term-lists)." if guessed else "."))
-    yield from _unused_renderings(data, usage, lower)
 
 
 def _unused_renderings(data: TermData, usage: UsageCounter, lower: dict) -> Iterator[Finding]:
@@ -286,7 +285,7 @@ def _unused_renderings(data: TermData, usage: UsageCounter, lower: dict) -> Iter
                         found = True
                         break
             if not found:
-                yield Finding(PLACE, "(renderings)", WARNING, "terms", item,
+                yield Finding(PLACE, "(renderings)", WARNING, "term-renderings", item,
                               f"the rendering '{item}' of the term '{term.id}' is not found anywhere in the text",
                               "")
 
@@ -336,11 +335,13 @@ def rendering_words(item: str) -> int:
 
 
 def check_term_renderings(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
-    """Renderings of more than 5 words: a clause, not a rendering. When a clause translates the term, the verse is
-    marked OK without a rendering instead (the guide for technical managers)."""
+    """Renderings found nowhere in the text (all books: a typo or an old rendering), and renderings of more than 5
+    words: a clause, not a rendering. When a clause translates the term, the verse is marked OK without a rendering
+    instead (the guide for technical managers)."""
     if _skipped(ctx, "term-renderings"):
         return
     data: TermData = ctx.terms
+    yield from _unused_renderings(data, usage, _verse_texts(usage))
     ids = {term.id for term in data.terms}
     for term_id, rendering in data.renderings.items():
         if term_id not in ids:

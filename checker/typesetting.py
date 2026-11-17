@@ -260,6 +260,151 @@ def check_m_after_heading(sources: list[tuple[str, str]], ctx: CheckContext) -> 
                                      "paragraph, not one that goes on")
 
 
+# --- list-markers ---
+
+LIST_ITEM_RE = re.compile(r"(?:li|lim)\d*$")
+EMBEDDED_RE = re.compile(r"pm[rc]?$")  # \pm, \pmr, \pmc: lines of embedded text (a letter)
+OWN_LIST_RE = re.compile(r"\\z[a-z]*li[a-z]*\d*\b")  # a list item made with an own marker inside a line (\zli1)
+PASS_OVER = frozenset({"b", "c", "r", "mr", "sr", "sp"})  # lines between \lh and its list (and headings, below)
+
+
+def _paragraphs(source: _Source) -> list[tuple[str, int, str]]:
+    """(marker, start, text up to the next paragraph marker) of each paragraph; \\v and \\c are not paragraphs."""
+    found = [(m.group(1), m.start()) for m in PARAGRAPH_RE.finditer(source.text)
+             if PARAGRAPH_MARKERS.match(m.group(1)) and m.group(1) not in ("v", "c")]
+    ends = [start for _, start in found[1:]] + [len(source.text)]
+    return [(name, start, source.text[start:end]) for (name, start), end in zip(found, ends)]
+
+
+CHAPTER_RE = re.compile(r"\\c\s")
+
+
+def _chapter_between(paragraphs: list, first: int) -> bool:
+    """A \\c between paragraph `first` and the next one (the text of a paragraph runs up to the next one)."""
+    return CHAPTER_RE.search(paragraphs[first][2]) is not None
+
+
+def _next(paragraphs: list, index: int, step: int, skip) -> int | None:
+    """Index of the nearest paragraph in direction `step` that `skip` does not pass over; None at the edge of the
+    chapter: an \\lf at the start of a chapter does not close a list of the chapter before."""
+    while True:
+        index += step
+        if not 0 <= index < len(paragraphs) or _chapter_between(paragraphs, min(index, index - step)):
+            return None
+        if not skip(paragraphs[index][0]):
+            return index
+
+
+POETRY_LINE_RE = re.compile(r"(?:q|qm)(\d*)$")
+PLAIN_PARAGRAPH_RE = re.compile(r"(?:p|m|mi|nb|pi\d*)$")
+
+
+def _level(marker: str) -> str:
+    return re.sub(r"\D", "", marker) or "1"
+
+
+def _run_after(paragraphs: list, last: int, kind: re.Pattern) -> bool:
+    """The lines up to `last` (of one kind) come right after a line of `kind` in the same chapter: the place was
+    reported at the first line of the run (\\li1 \\q1 \\q2 \\li2 = poetry lines in a list, said once)."""
+    run = paragraphs[last][0]
+    same = LIST_ITEM_RE if LIST_ITEM_RE.match(run) else POETRY_LINE_RE
+    index = last
+    while index > 0 and same.match(paragraphs[index][0]) and not _chapter_between(paragraphs, index - 1):
+        index -= 1
+        if kind.match(paragraphs[index][0]):
+            return True
+    return False
+
+
+def _mixed_list(paragraphs: list, index: int) -> str:
+    """A poetry line right next to a list line (\\li1 … \\q2 …), or a plain paragraph between two list lines: one
+    marker of the list is wrong. "" = nothing to report."""
+    if index == 0:
+        return ""
+    if _chapter_between(paragraphs, index - 1):
+        return ""
+    marker, before = paragraphs[index][0], paragraphs[index - 1][0]
+    after = (paragraphs[index + 1][0] if index + 1 < len(paragraphs) and not _chapter_between(paragraphs, index)
+             else "")
+    if POETRY_LINE_RE.match(marker) and LIST_ITEM_RE.match(before) and not _run_after(paragraphs, index - 1,
+                                                                                       POETRY_LINE_RE):
+        return (f"a poetry line \\{marker} right after a list line \\{before}: change '\\{marker}' to "
+                f"'\\li{_level(marker)}'?")
+    if LIST_ITEM_RE.match(marker) and POETRY_LINE_RE.match(before) and not _run_after(paragraphs, index - 1,
+                                                                                      LIST_ITEM_RE):
+        return (f"a list line \\{marker} right after a poetry line \\{before}: change '\\{marker}' to "
+                f"'\\q{_level(marker)}'? (or put \\b between them)")
+    if PLAIN_PARAGRAPH_RE.match(marker) and LIST_ITEM_RE.match(before) and LIST_ITEM_RE.match(after):
+        return f"a paragraph \\{marker} between two list lines: change '\\{marker}' to '\\li{_level(marker)}'?"
+    return ""
+
+
+def check_list_markers(sources: list[tuple[str, str]], ctx: CheckContext) -> Iterator[Finding]:
+    """\\lh (the line before a list) and \\lf (the line after it), \\pmo and \\pmc put the wrong way round."""
+    for source in _sources(sources):
+        paragraphs = _paragraphs(source)
+
+        def name(index):
+            return paragraphs[index][0] if index is not None else ""
+
+        def is_list(index):
+            # A poetry line inside a list (\li1 \q2) is a list line with a wrong marker: reported once, at itself.
+            return index is not None and (LIST_ITEM_RE.match(paragraphs[index][0]) is not None
+                                          or OWN_LIST_RE.search(paragraphs[index][2]) is not None
+                                          or (POETRY_LINE_RE.match(paragraphs[index][0]) is not None
+                                              and _mixed_list(paragraphs, index) != ""))
+
+        for index, (marker, start, text) in enumerate(paragraphs):
+            mixed = _mixed_list(paragraphs, index)
+            if mixed:
+                yield source.finding(start, start + len(marker) + 1, "list-markers", f"\\{marker}", mixed)
+                continue
+            if marker not in ("lh", "lf", "pmo", "pmc") or OWN_LIST_RE.search(text):
+                continue
+            same_or_blank = lambda other: other in ("b", marker)  # noqa: E731
+            message = ""
+            if marker == "lh":
+                after = _next(paragraphs, index, 1,
+                              lambda other: other in PASS_OVER or other == "lh" or HEADING_RE.match(other))
+                if is_list(after):
+                    continue
+                if is_list(_next(paragraphs, index, -1, same_or_blank)):
+                    message = "change '\\lh' to '\\lf'? \\lh is the line before a list, but the list is before it"
+                elif name(after) == "lf":
+                    message = "no list between \\lh and \\lf: did the list lines lose their markers (\\li1)?"
+                elif after is None and index + 1 < len(paragraphs):
+                    message = ("\\lh at the end of a chapter: \\lh is the line before a list, and the list must be "
+                               "in the same chapter")
+                else:
+                    message = "no list after \\lh: \\lh is the line before a list"
+            elif marker == "lf":
+                if is_list(_next(paragraphs, index, -1, same_or_blank)):
+                    continue
+                if name(_next(paragraphs, index, -1, same_or_blank)) == "lh":
+                    continue  # reported at the \lh: no list between them
+                if is_list(_next(paragraphs, index, 1, same_or_blank)):
+                    message = "change '\\lf' to '\\lh'? \\lf is the line after a list, but the list comes after it"
+                elif _next(paragraphs, index, -1, same_or_blank) is None and index > 0:
+                    message = ("\\lf at the start of a chapter: \\lf is the line after a list, and the list must be "
+                               "in the same chapter")
+                else:
+                    message = "no list before \\lf: \\lf is the line after a list"
+            elif marker == "pmo":
+                after = _next(paragraphs, index, 1, same_or_blank)
+                if EMBEDDED_RE.match(name(after)):
+                    continue
+                if EMBEDDED_RE.match(name(_next(paragraphs, index, -1, same_or_blank))):
+                    message = "change '\\pmo' to '\\pmc'? \\pmo opens a letter, but the letter is before it"
+            else:
+                before = _next(paragraphs, index, -1, same_or_blank)
+                if EMBEDDED_RE.match(name(before)) or name(before) == "pmo":
+                    continue
+                if EMBEDDED_RE.match(name(_next(paragraphs, index, 1, same_or_blank))):
+                    message = "change '\\pmc' to '\\pmo'? \\pmc closes a letter, but the letter comes after it"
+            if message:
+                yield source.finding(start, start + len(marker) + 1, "list-markers", f"\\{marker}", message)
+
+
 # --- duplicate-footnotes ---
 
 DUP_DISTANCE = 7000  # characters of the file from one note to the next: about one printed page

@@ -6,6 +6,20 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
+- **Unit 1 checks the whole project.** Its checks look at the lists of the project (Wordlist, inventories, word
+  breaks, Biblical Terms, unused entries) and always read all books, also when you choose books. Units 2-6 check
+  only the chosen books. Before, one chosen book gave thousands of false problems ("never used in the text").
+  unused moved to Unit 1. hyphenation is now two checks: hyphenation-list (Unit 1: the rules of the list itself)
+  and hyphenation (Unit 4: words of the text missing from the list, long words with no breaks). Renderings found
+  nowhere in the text moved from terms to term-renderings.
+- **New check list-markers** (Unit 2, Markers and titles): \lh and \lf, \pmo and \pmc put the wrong way round
+  (\lh is the line before a list, \lf the line after it), \lh with \lf and no list lines between them, \lf at the
+  start of a chapter, a poetry line (\q2) or a paragraph (\pi1) among the lines of a list.
+- **New checks numbers-in-verse, numbers-in-notes and us-measures** (Unit 3, Numbers and spaces): a number written
+  with digits that other translations do not have in the verse (265 years where they have 365, 590,300 for 59,300);
+  a number in a note that their notes do not have (444,000 litres for 440,000; '1 metre 8 cm' for 1.8 m); a note that
+  gives US tons (or feet, pounds …) where an English translation gives US and metric measures: a US ton is 907 kg,
+  so '4.5 tons' should be '4 tons'. Only the numbers of an English translation are kept in the program.
 - **marker-capitals** also checks the signature of a letter (\sig ... \sig*): its first word starts with a capital letter.
 - **New checks m-after-heading and duplicate-footnotes:** \m right after a heading (change it to \p); a
   footnote with the same text as a note shortly before it, without \cat dup\cat* (typesetting removes the second

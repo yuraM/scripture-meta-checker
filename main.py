@@ -36,6 +36,9 @@ CHECKS = [
     "digit-systems",         # digits of another system than most numbers (۲۷ among 27)
     "fractions",             # 1/2 where the project writes 1⁄2
     "sentence-numbers",      # a sentence or a quote starts with digits (… years. 430 years …)
+    "numbers-in-verse",      # a number in digits that other translations do not have in the verse (265 for 365)
+    "numbers-in-notes",      # a number of a note that the notes of other translations do not have (444,000 for 440,000)
+    "us-measures",           # a note gives US tons (or feet, pounds …) where the project uses metric measures
     "digit-hyphens",         # 10-12 with a hyphen-minus where the project writes 10‑12
     "quote-spaces",          # ”’ without the narrow no-break space the project puts between two quotation marks
     "marker-spaces",         # 'the \nd Lord \nd*': the space goes after the end marker
@@ -43,6 +46,7 @@ CHECKS = [
     "footnote-spaces",       # space at the end of a note, before a note, missing after \f*
     "outline-references",    # a reference in \io without \ior
     "m-after-heading",       # \m right after a heading: \p
+    "list-markers",          # \lh after its list (should be \lf), \lf before it; \pmo and \pmc the same
     "duplicate-footnotes",   # the same note shortly before, without \cat dup\cat*
     "normalization",         # NormalizationForm (NFC)
     "paragraph-final",       # last punctuation of a paragraph; headings ending with "."
@@ -55,7 +59,8 @@ CHECKS = [
     "verse-lengths",         # verse 3x shorter/longer than usual (lengths of an English translation)
     "book-titles",           # \toc1 = \mt2 + \mt1, \toc2 = \h
     "special-spaces",        # narrow no-break space U+202F, "\fv 13 \fv*", н.~э., marks in verse lists
-    "hyphenation",           # hyphenatedWords.txt: rules, consistency, missing words
+    "hyphenation",           # words of the text missing from hyphenatedWords.txt, long words without breaks
+    "hyphenation-list",      # hyphenatedWords.txt itself: rules, unchecked entries, consistency (all books)
     "lists",                 # contradictions between SpellingStatus, Settings and hyphenation lists
     "approvals",             # approved list entries that look wrong; rejected ones used very often
     "variants",              # rare names one letter away from a frequent one (Петор / Петро)
@@ -77,9 +82,9 @@ CHECKS = [
     "note-callers",          # \f + / \x - written another way than usual
     "parallel-changes",      # ParallelPassageStatus.xml: approved parallel verses that were changed later
     "parallel-differences",  # ParallelPassageStatus.xml: parallel verses that differ in a few words
-    "terms",                 # Biblical Terms: rendering missing in a verse (clear cases only), unused renderings
+    "terms",                 # Biblical Terms: rendering missing in a verse (clear cases only)
     "term-lists",            # Biblical Terms: old 'OK without a rendering' marks, guessed renderings
-    "term-renderings",       # Biblical Terms: renderings of more than 5 words
+    "term-renderings",       # Biblical Terms: renderings found nowhere in the text, of more than 5 words
     "unused",                # list entries that never occur in the text (large report)
 ]
 

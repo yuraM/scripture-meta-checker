@@ -23,6 +23,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 from checker.model import ERROR, Finding
+from checker.stages import whole_project
 
 FINDINGS_FILE = "findings.json"
 ACCEPTED_FILE = "accepted.json"
@@ -96,7 +97,8 @@ def compare(previous: RunData, current: RunData) -> dict[str, Change]:
     errors_only = previous.errors_only or current.errors_only
 
     def selected(keys: Iterable[Key]) -> set[Key]:
-        return {key for key in keys if key[0] in checks and (books is None or key[1] in books)
+        # Checks of the whole project (the lists) read all books in every run: no book filter for them.
+        return {key for key in keys if key[0] in checks and (books is None or whole_project(key[0]) or key[1] in books)
                 and (not errors_only or key[3] == ERROR)}
 
     before, now = selected(previous.findings), selected(current.findings)

@@ -10,13 +10,14 @@ from functools import lru_cache
 from checker import places
 from checker.typesetting import (
     check_chapter_end_headings, check_digit_hyphens, check_duplicate_footnotes, check_footnote_spaces,
-    check_m_after_heading, check_marker_spaces,
+    check_list_markers, check_m_after_heading, check_marker_spaces,
     check_outline_references, check_quote_spaces,
 )
 from checker.forms import (
     check_all_caps, check_apostrophes, check_dashes, check_digit_systems, check_ellipses, check_fractions, check_heading_case,
     check_marker_capitals, check_note_callers, check_sentence_numbers, check_untranslated,
 )
+from checker.verse_numbers import check_numbers_in_notes, check_numbers_in_verse, check_us_measures
 from checker.verses import check_figures, check_glossary_words, check_repeated_text, check_verse_lengths
 from checker.poetry import (
     check_poetry_chapter_break, check_line_ends, check_poetry_long_lines, check_poetry_numbers,
@@ -708,39 +709,48 @@ def _list_finding(ref: str, severity: str, check: str, item: str, message: str) 
                    message=message, context="")
 
 
-def check_hyphenation(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
-    """Rules, consistency and coverage of hyphenatedWords.txt."""
+def check_hyphenation_list(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
+    """Rules and consistency of hyphenatedWords.txt itself (the whole list, whatever books are checked)."""
     if not ctx.hyphenation:
         return
     hyphenation = ctx.hyphenation
     entries = hyphenation.words
-    text_words = {word.lower() for word in usage.words}
     no_break_before = ctx.settings.word_medial_punctuation - {hyphenation.hard_hyphen}
     for entry in entries:
-        ref = f"line {entry.line}"
         for problem in rule_violations(entry, ctx.language, no_break_before):
-            yield _list_finding(ref, ERROR, "hyphenation", entry.text, f"'{entry.text}': {problem}")
-        if is_unhyphenated(entry, ctx.language, hyphenation.hard_hyphen) and entry.word.lower() in text_words:
-            yield _list_finding(ref, WARNING, "hyphenation", entry.text, f"'{entry.text}' is a long word with no places to break it")
+            yield _list_finding(f"line {entry.line}", ERROR, "hyphenation-list", entry.text,
+                                f"'{entry.text}': {problem}")
 
     # Unreviewed entries (no "*"): listed one by one only when there are few of them;
     # in a mostly generated list a single summary line is more useful.
     unreviewed = [entry for entry in entries if not entry.locked]
     if len(unreviewed) > MAX_LISTED_UNREVIEWED:
-        yield _list_finding("summary", WARNING, "hyphenation", "unreviewed",
+        yield _list_finding("summary", WARNING, "hyphenation-list", "unreviewed",
                             f"{len(unreviewed)} of {len(entries)} entries are not checked by a person (no '*' at the start)")
     else:
         for entry in unreviewed:
-            yield _list_finding(f"line {entry.line}", WARNING, "hyphenation", entry.text,
+            yield _list_finding(f"line {entry.line}", WARNING, "hyphenation-list", entry.text,
                                 f"'{entry.text}' is not checked by a person (no '*' at the start)")
 
     for issue in inconsistent_affixes(entries):
         shown = f"{issue.affix}-" if issue.side == "prefix" else f"-{issue.affix}"
         yield _list_finding(
-            f"line {issue.entry.line}", WARNING, "hyphenation", issue.entry.text,
+            f"line {issue.entry.line}", WARNING, "hyphenation-list", issue.entry.text,
             f"'{issue.entry.text}' breaks the {issue.side} '{shown}' as '{issue.actual}', but "
             f"{issue.majority_count} of {issue.group_count} words break it as '{issue.expected}' "
             f"(for example {issue.example})")
+
+
+def check_hyphenation(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
+    """Words of the checked text in hyphenatedWords.txt: missing ones, long ones with no places to break."""
+    if not ctx.hyphenation:
+        return
+    hyphenation = ctx.hyphenation
+    text_words = {word.lower() for word in usage.words}
+    for entry in hyphenation.words:
+        if is_unhyphenated(entry, ctx.language, hyphenation.hard_hyphen) and entry.word.lower() in text_words:
+            yield _list_finding(f"line {entry.line}", WARNING, "hyphenation", entry.text,
+                                f"'{entry.text}' is a long word with no places to break it")
 
     known = ctx.hyphenation.by_word
     missing = Counter()
@@ -1184,6 +1194,7 @@ SOURCE_CHECKS: dict[str, Callable[..., Iterator[Finding]]] = {
 PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Finding]]] = {
     "unused": check_unused,
     "hyphenation": check_hyphenation,
+    "hyphenation-list": check_hyphenation_list,
     "lists": check_lists,
     "approvals": check_approvals,
     "variants": check_variants,
@@ -1219,6 +1230,11 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "digit-systems": lambda usage, ctx: check_digit_systems(usage.segments, ctx),
     "fractions": lambda usage, ctx: check_fractions(usage.segments, ctx),
     "sentence-numbers": lambda usage, ctx: check_sentence_numbers(usage.segments, ctx),
+    "numbers-in-verse": lambda usage, ctx: check_numbers_in_verse(usage.verse_texts, usage.verse_ranges,
+                                                            ctx.to_original, ctx),
+    "us-measures": lambda usage, ctx: check_us_measures(usage.footnotes, ctx.to_original, ctx),
+    "numbers-in-notes": lambda usage, ctx: check_numbers_in_notes(usage.footnotes, usage.verse_texts, usage.verses,
+                                                          ctx.to_original, ctx),
     "quote-spaces": lambda usage, ctx: check_quote_spaces(usage.sources, ctx),
     "digit-hyphens": lambda usage, ctx: check_digit_hyphens(usage.sources, ctx),
     "marker-spaces": lambda usage, ctx: check_marker_spaces(usage.sources, ctx),
@@ -1226,6 +1242,7 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "outline-references": lambda usage, ctx: check_outline_references(usage.sources, ctx),
     "chapter-end-headings": lambda usage, ctx: check_chapter_end_headings(usage.sources, ctx),
     "m-after-heading": lambda usage, ctx: check_m_after_heading(usage.sources, ctx),
+    "list-markers": lambda usage, ctx: check_list_markers(usage.sources, ctx),
     "duplicate-footnotes": lambda usage, ctx: check_duplicate_footnotes(usage.sources, ctx),
     "line-ends": lambda usage, ctx: check_line_ends(usage.flow, usage.case_refs, ctx),
     "poetry-two-sentences": lambda usage, ctx: check_poetry_two_sentences(usage.poetry_lines, ctx),
