@@ -158,6 +158,80 @@ def check_marker_spaces(sources: list[tuple[str, str]], ctx: CheckContext) -> It
                                  "(the space goes after the end of the marker)")
 
 
+# --- note-markers, notes-in-spans ---
+
+NOTE_START_MARKERS = frozenset({"f", "fe", "ef", "x", "ex"})
+# Markers inside notes that close by themselves at the next marker or at the end of the note (no \fq* needed).
+# Not \xt (it is also used in the text and often closed), \fv (always closed: \fv 13\fv*), \fdc \xdc \fm (paired).
+SELF_CLOSING_NOTE_MARKERS = frozenset({"fr", "ft", "fq", "fqa", "fk", "fl", "fw", "fp",
+                                       "xo", "xk", "xq", "xta", "xop", "xot", "xnt"})
+NOT_TEXT_SPANS = frozenset({"fig", "cat", "ca", "va", "vp", "fv", "rb"})  # not a style the note would stand in
+MARKER_TOKEN_RE = re.compile(r"\\(\+?)([a-z]+\d*)(\*?)")
+
+
+def check_note_markers(sources: list[tuple[str, str]], ctx: CheckContext) -> Iterator[Finding]:
+    """A self-closing marker of a note written again while it is still open (\\fq four \\fq hundred), or closed by
+    hand (\\fqa …\\fqa*). Only a marker without + closes the one before it: after \\+xt …\\+xt* or \\+fv 13\\+fv*
+    the outer marker is still open; after \\fv 13\\fv* the quote goes on with a new \\fqa (that is right)."""
+    for source in _sources(sources):
+        text = source.text
+        in_note, last = False, None
+        for match in MARKER_TOKEN_RE.finditer(text):
+            plus, name, closing = match.groups()
+            if name in NOTE_START_MARKERS:
+                in_note, last = not closing, None
+                continue
+            if not in_note or plus:
+                continue
+            marker = f"\\{name}"
+            if closing:
+                if name in SELF_CLOSING_NOTE_MARKERS:
+                    yield source.finding(match.start(), match.end(), "note-markers", f"{marker}*",
+                                         f"'{marker}*': {marker} closes by itself at the next marker or at the end "
+                                         f"of the note: remove '{marker}*' (if text follows, change it to '\\ft ')")
+                continue
+            if name == last and name in SELF_CLOSING_NOTE_MARKERS:
+                between = " ".join(text[previous_end:match.start()].split())
+                fix = "remove the second one" if name == "ft" else \
+                    "remove the second one, or should the words between them be '\\ft'?"
+                yield source.finding(match.start(), match.end(), "note-markers", f"{marker} {between} {marker}",
+                                     f"'{marker}' comes again, but the first '{marker}' is still open: {fix}")
+            last, previous_end = name, match.end()
+
+
+def check_notes_in_spans(sources: list[tuple[str, str]], ctx: CheckContext) -> Iterator[Finding]:
+    """A note inside a character style of the text (\\wj … \\f + …\\f* … \\wj*): the style must be closed before the
+    note and opened again after it, or the note is printed in that style."""
+    for source in _sources(sources):
+        text = source.text
+        paired = {m.group(2) for m in MARKER_TOKEN_RE.finditer(text) if m.group(3)}
+        spans: list[str] = []
+        in_note = False
+        for match in MARKER_TOKEN_RE.finditer(text):
+            plus, name, closing = match.groups()
+            if name in NOTE_START_MARKERS:
+                if not closing and spans:
+                    kind = "cross reference" if name in ("x", "ex") else "footnote"
+                    outer = " … ".join(f"\\{span}" for span in spans)
+                    yield source.finding(match.start(), match.end(), "notes-in-spans", f"\\{spans[-1]}",
+                                         f"a {kind} inside '{outer} … \\{spans[-1]}*': close '\\{spans[-1]}' before "
+                                         f"'\\{name}' and open it again after '\\{name}*'")
+                in_note = not closing
+                continue
+            if in_note or name in NOT_TEXT_SPANS:
+                continue
+            if name in paired:
+                if closing:
+                    if name in spans:
+                        del spans[len(spans) - 1 - spans[::-1].index(name):]
+                elif plus:
+                    spans.append(name)
+                else:
+                    spans = [name]
+            elif name not in ("v", "c") and not closing:
+                spans = []  # a paragraph marker ends the open styles (a style left open is a usfm finding)
+
+
 # --- footnote-spaces ---
 
 SPACE_AT_NOTE_END_RE = re.compile(r"(\s+(?:\\ft\s*)?)\\(fe?)\*")

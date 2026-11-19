@@ -460,6 +460,13 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertEqual(sorted(found("footnote_spaces")), [("1:25", "\\f"), ("1:25", "\\f*"), ("1:25", "\\f*")])
         self.assertEqual(found("outline_references"), [("0:0", "1:1–17")])
         self.assertEqual(found("chapter_end_headings"), [("1:25", "Заголовок")])
+        sources = [("TST", "\\id TST\n\\c 1\n\\p \\v 1 Text\\f + \\fr 1:1 \\ft Or \\fq four \\fq hundred\\f* and"
+                           "\\f + \\fr 1:1 \\ft Or \\fqa Cainan. \\fv 2\\fv* \\fqa And\\f* (right: \\fv between)"
+                           "\\f + \\fr 1:1 \\ft see \\+xt 2:3\\+xt* \\ft also\\f* \\v 2 \\wj Words\\f + \\fr 1:2 \\fqa a"
+                           "\\fqa* b\\f*\\wj* \\wj more\\wj*\\x - \\xo 1:2 \\xt 3:4\\xt*\\x*\n")]
+        self.assertEqual([(ref, item.split()[0]) for ref, item in found("note_markers")],
+                         [("1:1", "\\fq"), ("1:1", "\\ft"), ("1:2", "\\fqa*")])
+        self.assertEqual(found("notes_in_spans"), [("1:2", "\\wj")])  # the \x after \wj* is outside
         sources = [("TST", "\\id TST\n\\c 1\n\\s1 Заголовок\n\\m \\v 1 Текст\\f + \\fr 1:1 \\ft Близько 2 л.\\f* і "
                            "\\v 2 ще\\f + \\fr 1:2 \\ft Близько 2 л.\\f* і\\f + \\cat dup\\cat*\\fr 1:2 \\ft Близько 2 л.\\f*\n"
                            "\\b\n\\m \\v 3 далі\\f + \\fr 1:3 \\ft Інше.\\f*\n")]
@@ -545,6 +552,13 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertEqual([(f.item, f.message.split("'")[1]) for f in findings],
                          [("space in number", "1, 440,000"), ("digit groups", "1,44,000"),
                           ("space in number", "45, 000"), ("space in number", "53, 400")])
+        # "." is both the thousands separator and the SequenceIndicator: "38.41" in a reference is a list of verses.
+        fmt = ReferenceFormat(chapter_verse=",", verse_ranges=("–",), verse_sequences=(".",),
+                              chapter_ranges=("‒",), chapter_sequences=("; ",), book_sequences=("; ",))
+        ctx = CheckContext(replace(self.settings, number_thousands_separator=".", reference_format=fmt), self.spelling)
+        text = "\\p (Luka 6,37–38.41–42; Janez 18,12–14.19–24) Android 4.2 in 3.000 mož"
+        findings = list(CHECKS["spacing"](ctx.analyse(parse_usfm(text, "TST")[0]), ctx))
+        self.assertEqual([f.message.split("'")[1] for f in findings], ["4.2"])
         ctx = CheckContext(replace(settings, hindi_urdu_grouping=True), self.spelling)
         text = "\\p 1, 44,000 і 1,44,000 і 144,000 і 12,34,56,789"
         findings = list(CHECKS["spacing"](ctx.analyse(parse_usfm(text, "TST")[0]), ctx))
@@ -753,6 +767,16 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         parts, issues = parse_reference("Быт. 37; 39; 41:37–57", fmt)
         self.assertEqual([(p.name, p.chapter) for p in parts], [("Быт.", 41)])
         self.assertEqual([(i.item, i.is_question) for i in issues], [("Быт. 37; 39;", True)])
+        # A full stop that is the project's SequenceIndicator is not a wrong chapter-verse mark; the number of a
+        # book name before a whole chapter ("; 4 Mojzes 11") is not a verse without a chapter.
+        dotted = ReferenceFormat(chapter_verse=",", verse_ranges=("–",), verse_sequences=(".",),
+                                 chapter_ranges=("‒",), chapter_sequences=("; ",), book_sequences=("; ",))
+        parts, issues = parse_reference("Luka 6,37–38.41–42; 2 Mojzes 16,4; 4 Mojzes 11", dotted)
+        self.assertEqual([(p.name, p.chapter, p.verses) for p in parts],
+                         [("Luka", 6, [(37, 38), (41, 42)]), ("2 Mojzes", 16, [(4, 4)])])
+        self.assertEqual(issues, [])
+        parts, issues = parse_reference("Luka 6,37.41 in 42", dotted)
+        self.assertEqual(parts[0].verses, [(37, 37), (41, 41)])
         # Book names: words before the name are dropped, also words that are no abbreviations.
         usage = UsageCounter()
         usage.book_names.update({"исх": "EXO", "пс": "PSA", "1 цар": "1SA"})

@@ -287,6 +287,8 @@ wordlist/
 | `quote-spaces` (opt-in, Unit 3 > Quotes and brackets) | raw files + Quotes / InnerQuotes / InnerInnerQuotes | — | two marks of different levels both opening or both closing (`” ’`, `»“`) with another space between them than ≥90% of ≥20 such places (usually U+202F; markers between do not count); a project that never puts one (none in all places) is left alone. Repo projects: 0-2 (`” ’` with a space, U+2006 in XXA) |
 | `digit-hyphens` (opt-in, Unit 3 > Numbers and spaces) | raw files (not `\v \c \vp \fr \xo`, link attributes, front/back matter) | — | hyphen-minus between two digits (`11:1-9`) when ≤10% of the digit-dash-digit places use it and ≥20 use another sign; the message gives the most used sign (`‑` U+2011 or `–`). A project that writes `-` (5 828×) is left alone. Repo projects: 0-2 |
 | `marker-spaces` (opt-in, Unit 2 > Markers and titles) | raw files | — | a space before the end of a character marker (`\nd Lord \nd*`, `\+xt 6‑14 \+xt*`): "change 'Lord \nd*' to 'Lord\nd* '"; not `\f* \x* \fe*` and not `\fv*` (special-spaces). Repo projects: 0-6 |
+| `note-markers` (opt-in, Unit 2 > Markers and titles) | raw notes `\f \fe \x \ef \ex` | — | a self-closing note marker (`fr ft fq fqa fk fl fw fp xo xk xq xta xop xot xnt`; not `\xt`, `\fv`, `\fdc`, `\xdc`, `\fm`) again while it is still open: `\fq four \fq hundred`, `\ft Atau \ft`, `\fqa X and \fqa Y` ("remove the second one, or should the words between them be '\ft'?"). Only a marker without `+` closes the one before it, so `\ft \+xt …\+xt* \ft` and `\fqa … \+fv 13\+fv*\fqa` are listed, `\fqa … \fv 13\fv* \fqa` is right (user decisions 2026-11-19). Also such a marker closed by hand (`\fqa …\fqa*`; USFM allows it, the user's rule does not): 0 in the repo projects. Repo projects: 0-32 |
+| `notes-in-spans` (opt-in, Unit 2 > Markers and titles) | raw files | — | a footnote or cross reference inside any open character style of the text (`\wj … \f + …\f* … \wj*`, also `\sig`, `\fm`, nested `\+…`): close the style before the note and open it again after it. Not `\fig \cat \vp \fv \rb`; a paragraph marker ends the open styles. Repo projects: 0-8 (tir 8 in `\wj`, a `\sig`, a `\fm` around a note) |
 | `chapter-end-headings` (opt-in, Unit 2 > Markers and titles) | raw files (not front/back matter) | — | `\s#`/`\ms#` (with its `\r \mr \sr \sp`) as the last paragraph before `\c` or the end of the book. Repo projects: 0 (a safety net) |
 | `footnote-spaces` (opt-in, Unit 5 > Footnotes) | raw `\f`/`\fe` | — | a space at the end of a note (before `\f*`, also after an empty `\ft`); a space between a word and `\f` when ≥90% of ≥20 notes stand right after the word (not after a marker or `\v N`); a letter right after `\f*` when ≤10% of the notes are followed by a letter (scripts without spaces glue them). Repo projects: 0-4 |
 | `outline-references` (opt-in, Unit 5 > References) | raw `\io#` lines + ChapterVerseSeparator | — | `chapter:verse` (with its range) in an outline line outside `\ior … \ior*`. Repo projects: 0-7 (one project marks no outline; a broken `\ ior*` was found) |
@@ -340,7 +342,7 @@ book in order, because a quote may span paragraphs and chapters. Design:
   are warnings marked "(in a footnote)".
 
 `unused`, `hyphenation`, `hyphenation-list`, `lists`, `approvals`, `variants`, `name-case`, `styled-words`, `divine-name`, `numbers`, `footnotes`, `references`, `untranslated-verses`, `repeated-text`, `verse-lengths`, `glossary-words`, `figures`, `dashes`, `ellipses`,
-`heading-case`, `all-caps`, `marker-capitals`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `sentence-numbers`, `numbers-in-verse`, `numbers-in-notes`, `us-measures`, `quote-spaces`, `digit-hyphens`, `marker-spaces`, `chapter-end-headings`, `footnote-spaces`, `outline-references`, `m-after-heading`, `list-markers`, `duplicate-footnotes`, `self-references`, `one-chapter-books`, `term-renderings`,
+`heading-case`, `all-caps`, `marker-capitals`, `note-callers`, `book-name-forms`, `apostrophes`, `digit-systems`, `fractions`, `sentence-numbers`, `numbers-in-verse`, `numbers-in-notes`, `us-measures`, `quote-spaces`, `digit-hyphens`, `marker-spaces`, `note-markers`, `notes-in-spans`, `chapter-end-headings`, `footnote-spaces`, `outline-references`, `m-after-heading`, `list-markers`, `duplicate-footnotes`, `self-references`, `one-chapter-books`, `term-renderings`,
 `poetry-numbers`, `line-ends`, `poetry-two-sentences`, `poetry-long-lines`, `poetry-verse-inside`,
 `poetry-chapter-break`, `parallel-changes`,
 `parallel-differences`, `terms` and `term-lists` are project-level checks (`PROJECT_CHECKS`): they run once after
@@ -414,7 +416,12 @@ Notes on the checks added 2026-10-29 (all eight proposed ideas were accepted):
 - `references` (`checker/references.py`): all marks come from `ProjectSettings.reference_format`; a setting may
   list choices with `|` and they keep their spaces (`, |,`, `–|—| and `). A wrong mark is reported but the reference
   is still read: a dash (Unicode category Pd) as a range, anything else as a list. Any colon or full stop between
-  numbers (by Unicode name) counts as a wrong chapter-verse mark. `usfm` uses the same reader for `\fr`/`\xo`.
+  numbers (by Unicode name) counts as a wrong chapter-verse mark, unless the project uses it as another mark of
+  Reference Format (added 2026-11-19: a project with `,` between chapter and verse and `.` as SequenceIndicator,
+  `Luka 6,37–38.41–42`, had 65 false errors). After a mark between references, a number followed by a word and a
+  number is the number of a book name before a whole chapter (`16,4; 4 Mojzes 11`, `; 2~Пар. 26‒32`), not a verse
+  without a chapter. `spacing` does not check the digit groups of a number in a reference when the thousands
+  separator is also a mark of Reference Format (`18,12–14.19–24` with `.` for thousands too). `usfm` uses the same reader for `\fr`/`\xo`.
   A part without a book name keeps the previous book (start: the current book, but nothing in front/back matter and
   notes books `PERIPHERAL_BOOKS`: their introductions cite many books without names); after an unknown name it is
   skipped. Leading words are dropped one by one until the rest is a book name (`див. Мт.`, `см. также Пс.`,

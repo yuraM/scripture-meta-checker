@@ -10,7 +10,7 @@ from functools import lru_cache
 from checker import places
 from checker.typesetting import (
     check_chapter_end_headings, check_digit_hyphens, check_duplicate_footnotes, check_footnote_spaces,
-    check_list_markers, check_m_after_heading, check_marker_spaces,
+    check_list_markers, check_m_after_heading, check_marker_spaces, check_note_markers, check_notes_in_spans,
     check_outline_references, check_quote_spaces,
 )
 from checker.forms import (
@@ -328,6 +328,16 @@ def _numbers(text: str, ctx: CheckContext) -> Iterator[re.Match]:
         yield match
 
 
+def _reference_list(text: str, start: int, ctx: CheckContext) -> bool:
+    """The thousands separator is also a mark of Reference Format and the number stands in a reference: in
+    "Luka 6,37–38.41–42" the "." of "38.41" is the SequenceIndicator, not the thousands separator."""
+    marks, after, _ = _reference_patterns(ctx.settings.reference_format)
+    if ctx.settings.number_thousands_separator.strip() not in marks:
+        return False
+    # "6,37–" + a number is a reference that goes on: the number after the mark belongs to it.
+    return bool(after.search(text[max(start - 80, 0):start] + "0"))
+
+
 def four_digit_form(number: str, separator: str) -> bool | None:
     """True = "4 000" (with the separator), False = "4000", None = not a 4-digit number."""
     groups = number.split(separator)
@@ -396,7 +406,7 @@ def check_spacing(analysis: Analysis, ctx: CheckContext) -> Iterator[Finding]:
         if len(groups) == 1 and len(number) >= MIN_SEPARATED_DIGITS:
             yield analysis.finding(start, len(number), WARNING, "spacing", "no thousands separator",
                                    f"number '{number}' needs a thousands separator {shown}")
-        elif len(groups) > 1 and not _groups_ok(groups, hindi_urdu):
+        elif len(groups) > 1 and not _groups_ok(groups, hindi_urdu) and not _reference_list(text, start, ctx):
             rule = ("the digit groups must have 2 digits, and the last group 3 digits" if hindi_urdu
                     else "after the thousands separator there must be 3 digits")
             yield analysis.finding(start, len(number), WARNING, "spacing", "digit groups",
@@ -1238,6 +1248,8 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "quote-spaces": lambda usage, ctx: check_quote_spaces(usage.sources, ctx),
     "digit-hyphens": lambda usage, ctx: check_digit_hyphens(usage.sources, ctx),
     "marker-spaces": lambda usage, ctx: check_marker_spaces(usage.sources, ctx),
+    "note-markers": lambda usage, ctx: check_note_markers(usage.sources, ctx),
+    "notes-in-spans": lambda usage, ctx: check_notes_in_spans(usage.sources, ctx),
     "footnote-spaces": lambda usage, ctx: check_footnote_spaces(usage.sources, ctx),
     "outline-references": lambda usage, ctx: check_outline_references(usage.sources, ctx),
     "chapter-end-headings": lambda usage, ctx: check_chapter_end_headings(usage.sources, ctx),

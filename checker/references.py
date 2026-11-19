@@ -23,6 +23,8 @@ _BARE_NUMBER_RE = re.compile(rf"(\D*?)(\d+)(?!\d)(?:{LETTER}(?!{LETTER}))?(?!{LE
 # A book name at the end of a text: "Мт.", "1 Сам.", "1ዜና", "2 Raja-raja".
 _NAME_WORD = rf"{LETTER}+(?:[-‐‑'’]{LETTER}+)*\.?"
 _TAIL_NAME_RE = re.compile(rf"(?:\d+\s?)?{_NAME_WORD}(?:\s+{_NAME_WORD})*\s*$")
+# After the number of a book name: the name and a chapter ("4| Mojzes 11").
+_BOOK_NUMBER_RE = re.compile(rf"[\s~]?{_NAME_WORD}(?:\s+{_NAME_WORD})*[\s~]+\d")
 # Whole chapters at the end of a text, after a space: " 37; 39; " (numbers and marks that are not letters).
 _TAIL_CHAPTERS_RE = re.compile(r"(?<=\s)\d+(?:[^\w\d]+\d+)*[^\w\d]*$")
 
@@ -57,6 +59,10 @@ def _is_chapter_verse_mark(mark: str, fmt: ReferenceFormat) -> bool:
     """The project's own mark, or a sign that can only be a wrong one: any colon or full stop by Unicode name."""
     if mark == fmt.chapter_verse:
         return True
+    # A mark with another role in the project is that role: "." is the SequenceIndicator in "6,37–38.41–42".
+    if mark in (*fmt.verse_sequences, *fmt.verse_ranges, *fmt.chapter_ranges, *fmt.chapter_sequences,
+                *fmt.book_sequences):
+        return False
     name = unicodedata.name(mark, "")
     return (name.endswith("COLON") and not name.endswith("SEMICOLON")) or name.endswith("FULL STOP")
 
@@ -125,6 +131,11 @@ def _read_verses(part: ReferencePart, text: str, fmt: ReferenceFormat, issues: l
         # A word that is not one of the marks: the rest is not a verse list ("; Ос. 1—3", "1:2 та 5").
         if mark not in (*fmt.verse_ranges, *fmt.verse_sequences) and any(ch.isalpha() for ch in mark):
             break
+        # The number of a book name before whole chapters ("16,4; 4 Mojzes 11"): not a verse. The marks after the
+        # last number go before the next chapter.
+        between_references = {item.strip() for item in (*fmt.chapter_sequences, *fmt.book_sequences)}
+        if mark.strip() in between_references and _BOOK_NUMBER_RE.match(text, match.end(2)):
+            return re.search(r"\D*$", text).group()
         position = match.end()
         if mark in fmt.verse_ranges:
             is_range = True

@@ -84,6 +84,13 @@ CHECK_DESCRIPTIONS = {
                      "(a non-breaking hyphen ‑ or a dash –). Verse numbers and note references are not counted.",
     "marker-spaces": "A space before the end of a character marker ('the \\nd Lord \\nd*'). The space belongs after "
                      "the end marker ('the \\nd Lord\\nd* '), or the printed text gets a wrong space.",
+    "note-markers": "Markers inside notes that close by themselves (\\fr \\ft \\fq \\fqa \\fk \\fl \\fw \\fp \\xo \\xk "
+                    "\\xq …): the same marker again while it is still open ('\\fq four \\fq hundred'; a marker with + "
+                    "between, such as \\+xt …\\+xt* or \\+fv 13\\+fv*, does not close it; \\fv 13\\fv* does), or the "
+                    "marker closed by hand ('\\fqa …\\fqa*').",
+    "notes-in-spans": "A footnote or cross reference inside a character style of the text ('\\wj … \\f + …\\f* … "
+                      "\\wj*'). Close the style before the note and open it again after it, or the note is printed "
+                      "in that style.",
     "chapter-end-headings": "A heading (\\s, \\ms) as the last line of a chapter or a book. A heading belongs before "
                             "the text it names: move it after the next \\c.",
     "footnote-spaces": "Spaces around footnotes: a space at the end of a note (before \\f*); a space before a note "

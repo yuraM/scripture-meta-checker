@@ -12,6 +12,11 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
   unused moved to Unit 1. hyphenation is now two checks: hyphenation-list (Unit 1: the rules of the list itself)
   and hyphenation (Unit 4: words of the text missing from the list, long words with no breaks). Renderings found
   nowhere in the text moved from terms to term-renderings.
+- **New check note-markers** (Unit 2, Markers and titles): a marker of a note written again while it is still
+  open ('\fq four \fq hundred', '\ft Or \ft'; a marker with + between, such as \+xt …\+xt*, does not close it), and
+  \fq, \fqa, \ft … closed by hand ('\fqa …\fqa*'). They close by themselves.
+- **New check notes-in-spans** (Unit 2, Markers and titles): a footnote or cross reference inside a character style
+  ('\wj … \f + …\f* … \wj*'). Close the style before the note and open it again after it.
 - **New check list-markers** (Unit 2, Markers and titles): \lh and \lf, \pmo and \pmc put the wrong way round
   (\lh is the line before a list, \lf the line after it), \lh with \lf and no list lines between them, \lf at the
   start of a chapter, a poetry line (\q2) or a paragraph (\pi1) among the lines of a list.
@@ -92,6 +97,14 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 - **poetry-verse-inside** (Unit 6, Poetry 5): a verse number inside a poetry line.
 - **poetry-chapter-break** (Unit 6, Poetry 6): poetry goes on into the next chapter with no `\b` (stanza
   break) at the end of the chapter and no heading.
+
+### Fixed
+
+- **references**: a full stop between verses that the project uses as its sequence mark ('Luka 6,37–38.41–42')
+  was read as a wrong mark between chapter and verse. The number of a book name after ';' ('16,4; 4 Mojzes 11')
+  was read as a verse without a chapter.
+- **spacing**: a list of verses ('18,12–14.19–24') was read as a number with a wrong thousands separator when
+  the project uses the same mark for both.
 
 ## 1.0.2 (2026-11-12)
 
