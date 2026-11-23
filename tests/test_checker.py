@@ -324,13 +324,21 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         self.assertIn("Wordlist is empty", reasons["spelling"])
 
     def test_repeated_text(self):
+        from checker.usfm import Segment
         from checker.verses import check_repeated_text
         texts = {("TST", 1, 1): "І сказав він до них слово своє.", ("TST", 1, 2): "І сказав він до них слово своє.",
-                 ("TST", 1, 3): "Він пішов до міста він пішов до міста вночі.",
-                 ("TST", 1, 4): "Отче мій, отче мій, де ти?",                    # a mark between: on purpose
                  ("TST", 1, 5): "Один текст для двох віршів тут.", ("TST", 1, 6): "Один текст для двох віршів тут."}
-        found = list(check_repeated_text(texts, {("TST", 1, 5), ("TST", 1, 6)}))
-        self.assertEqual([(f.ref, f.item) for f in found], [("1:2", "1:2"), ("1:3", "Він пішов до міста")])
+        segments = [
+            Segment("TST", "p", False, "Він пішов до міста він пішов до міста вночі.", ((0, "1", "3"),)),
+            Segment("TST", "p", False, "Наказ на наказ, наказ на наказ, де ти?", ((0, "1", "4"),)),  # a comma: listed
+            Segment("TST", "p", False, "Мій батько тут! Мій батько тут! Іди.", ((0, "1", "7"),)),  # a sentence end
+            Segment("TST", "f", True, "завіса в храмі: завіса в храмі відділяла святе", ((0, "1", "8"),)),
+        ]
+        found = list(check_repeated_text(texts, {("TST", 1, 5), ("TST", 1, 6)}, segments))
+        self.assertEqual([(f.ref, f.item) for f in found],
+                         [("1:2", "1:2"), ("1:3", "Він пішов до міста"), ("1:4", "Наказ на наказ"),
+                          ("1:8", "завіса в храмі")])
+        self.assertEqual(found[-1].message, "'завіса в храмі' is written twice in a row (in a note)")
 
     def test_verse_lengths(self):
         from unittest import mock
@@ -474,6 +482,29 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         duplicates = list(typesetting.check_duplicate_footnotes(sources, self.ctx))
         self.assertEqual([f.ref for f in duplicates], ["1:2"])  # the third note has \cat dup already
         self.assertIn("at TST 1:1", duplicates[0].message)
+        # \cat dup after \fr still counts (no finding), but note-markers asks to move it; a second \fr is listed.
+        sources = [("TST", "\\id TST\n\\c 1\n\\p \\v 1 Текст\\f + \\fr 1:1 \\ft Селах.\\f* і "
+                           "\\v 2 ще\\f + \\fr 1:2 \\cat dup\\cat*\\fr 1:2 \\ft Селах.\\f*\n")]
+        self.assertEqual(found("duplicate_footnotes"), [])
+        moved = list(typesetting.check_note_markers(sources, self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in moved], [("1:2", "\\cat dup\\cat*"), ("1:2", "\\fr 1:2")])
+        self.assertIn("('\\f + \\cat dup\\cat*\\fr …')", moved[0].message)
+        self.assertIn("a second '\\fr' in one note", moved[1].message)
+        # footnote-references: a note without \fr when 20 of 21 have it; a note with no text.
+        body = "".join(f"\\v {n} Текст\\f + \\fr 1:{n} \\ft Нотатка.\\f*\n" for n in range(1, 21))
+        content = ("\\id TST\n\\ip Вступ\\f + \\ft Без посилання.\\f*\n\\c 1\n\\p \\f + \\ft In Hebrew 1:1.\\f*\n"
+                   + body + "\\v 21 Кінець\\f + \\fr 1:21 \\cat dup\\cat*\\f*\n")
+        refs = list(typesetting.check_footnote_references([("TST", content)], self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in refs], [("1:21", "\\f + \\fr 1:21 \\cat dup\\cat*\\f*"),
+                                                           ("1:0", "\\f +")])  # not the note of the introduction
+        self.assertIn("a note with no text", refs[0].message)
+        self.assertIn("add '\\fr 1:0 ' after the caller", refs[1].message)
+        # '\fr 2 ' names only the chapter: a note before verse 1 is '\fr 2:0 '.
+        content += "\\c 2\n\\p \\f + \\fr 2 \\ft Розділ.\\f*\n\\v 1 Текст\n"
+        refs = list(typesetting.check_footnote_references([("TST", content)], self.ctx))
+        self.assertEqual([(f.ref, f.item) for f in refs][1:], [("2:0", "\\fr 2"), ("1:0", "\\f +")])
+        self.assertIn("change it to '\\fr 2:0'", refs[1].message)
+        self.assertIn("add '\\fr 1:0 ' after the caller", refs[2].message)
         sources = [("TST", "\\id TST\n\\c 1\n"
                            "\\lh \\v 1 Сини:\n\\s2 Заголовок\n\\li1 Рувим\n\\li1 Симеон\n\\lf \\v 2 Це сини.\n"  # right
                            "\\q1 \\v 3 Пісня\n\\lf \\v 4 Сини Хама:\n\\b\n\\li1 Куш\n\\lh \\v 5 Це сини Хама.\n"  # swapped
@@ -605,6 +636,17 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
                    "\\s1 д\\f + \\fr 1:4 \\ft е\\f*\n\\p \\v 3 ж")
         findings = list(SOURCE_CHECKS["usfm"]("TST", content, self.ctx))
         self.assertEqual([(f.ref, f.item) for f in findings], [("1:2", "\\fr")])
+
+    def test_usfm_note_inside_note(self):
+        content = ("\\id TST\n\\c 1\n\\p \\v 1 Слово.\\f + \\fr 1:1 \\f + \\cat dup\\cat* \\ft Селах.\\f* "
+                   "\\v 2 Слово.\\f + \\fr 1:2 \\ft Інше \\f + \\fr 1:2 \\ft ще.\\f*\n")
+        findings = list(SOURCE_CHECKS["usfm"]("TST", content, self.ctx))
+        self.assertEqual([(f.ref, f.message) for f in findings], [
+            ("1:1", "a new note '\\f' starts inside the note '\\f + \\fr 1:1', which has no text and no closing "
+                    "\\f*: remove '\\f + \\fr 1:1'"),
+            ("1:2", "a new note '\\f' starts inside the note '\\f + \\fr 1:2 \\ft Інше', which has no closing "
+                    "\\f*: add '\\f*' before the new note"),
+        ])
 
     def test_letter_mark_is_not_a_book_name(self):
         fmt = ReferenceFormat(chapter_verse=":", verse_ranges=("-",), verse_sequences=(",", " x "),

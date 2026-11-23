@@ -77,6 +77,19 @@ def verse_range(number: str) -> tuple[int, int] | None:
     return first, int(parsed.group(2) or first)
 
 
+_CATEGORY_RE = re.compile(r"\\cat\s.*?\\cat\*", re.S)
+_NOTE_START_RE = re.compile(r"^\s*\\[a-z]+\s+\S+")  # the note marker and its caller
+_NOTE_REFERENCE_RE = re.compile(r"\\(?:fr|xo)\s[^\\]*")
+_ANY_MARKER_RE = re.compile(r"\\\+?[a-z]+\d*\*?")
+
+
+def note_has_text(note: str) -> bool:
+    """Is there text in a note ("\\f + \\fr 2:3 \\ft …") besides its caller, its \\fr / \\xo and its \\cat?"""
+    rest = _NOTE_START_RE.sub(" ", _CATEGORY_RE.sub(" ", note), count=1)
+    rest = _NOTE_REFERENCE_RE.sub(" ", rest)
+    return bool(_ANY_MARKER_RE.sub(" ", rest).strip())
+
+
 def _is_heading(style: str) -> bool:
     # \d (psalm title) is often part of verse 1, so its text counts.
     return style != "d" and (style in ISOLATED_STYLES or style.startswith(ISOLATED_STYLE_PREFIXES))
@@ -126,7 +139,7 @@ class _StructureScanner:
                 if name == self.skip:
                     self.skip = None
             elif name in NOTE_MARKERS:
-                yield from self._close_note(match.start(), implicit=True)
+                yield from self._close_note(match.start(), implicit=True, next_note=name)
                 yield from self._open_note(name, match.start())
                 continue
             elif name in self.paired:
@@ -283,10 +296,20 @@ class _StructureScanner:
         self.note_spans = []
         return iter(())
 
-    def _close_note(self, offset: int, implicit: bool) -> Iterator[Finding]:
+    def _close_note(self, offset: int, implicit: bool, next_note: str = "") -> Iterator[Finding]:
         if self.note and implicit:
-            yield self.finding(self.note.offset, ERROR, f"\\{self.note.name}",
-                               f"note \\{self.note.name} has no closing \\{self.note.name}*", ref=self.note.ref)
+            name = self.note.name
+            message = f"note \\{name} has no closing \\{name}*"
+            if next_note:
+                # \f + \fr 21:2 \f + \cat dup\cat* \ft …\f*: a second start of a note inside the first one.
+                written = " ".join(self.content[self.note.offset:offset].split())
+                if note_has_text(self.content[self.note.offset:offset]):
+                    message = (f"a new note '\\{next_note}' starts inside the note '{written}', which has no closing "
+                               f"\\{name}*: add '\\{name}*' before the new note")
+                else:
+                    message = (f"a new note '\\{next_note}' starts inside the note '{written}', which has no text and "
+                               f"no closing \\{name}*: remove '{written}'")
+            yield self.finding(self.note.offset, ERROR, f"\\{name}", message, ref=self.note.ref)
         if self.note:
             for inner in self.note_spans:
                 if inner.name not in NOTE_CONTENT_MARKERS:

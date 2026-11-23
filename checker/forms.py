@@ -345,7 +345,7 @@ NOT_TEXT_STYLES = frozenset({"xt", "fig"})  # numbers in these character styles 
 WHOLE_NUMBER_RE = re.compile(r"\d+(?:[^\w\s]\d+|[ " + chr(0xA0) + chr(0x202F) + r"]\d{3})*")
 
 
-def _sentence_marks(ctx: CheckContext) -> frozenset[str]:
+def sentence_marks(ctx: CheckContext) -> frozenset[str]:
     marks = set("".join(ctx.settings.sentence_final_punctuation)) or set(".!?")
     return frozenset(ch for ch in marks if any(name in unicodedata.name(ch, "") for name in SENTENCE_END_NAMES))
 
@@ -380,7 +380,7 @@ def number_start(text: str, start: int, marks: frozenset[str], openers: frozense
 
 
 def check_sentence_numbers(segments: list[Segment], ctx: CheckContext) -> Iterator[Finding]:
-    marks, openers = _sentence_marks(ctx), _quote_openers(ctx)
+    marks, openers = sentence_marks(ctx), _quote_openers(ctx)
     separator = ctx.settings.chapter_verse_separator or ":"
     for segment in segments:
         if (segment.in_note or segment.book in PERIPHERAL_BOOKS

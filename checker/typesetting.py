@@ -17,6 +17,8 @@ regular expressions; here each place is a warning that says what to change, the 
 - duplicate-footnotes: a footnote with the same text as a footnote shortly before it (within DUP_DISTANCE
   characters, about a page) without \\cat dup\\cat*. In typesetting, when both are on one page, the second note is
   removed and its caller is the caller of the first one; \\cat dup\\cat* marks the notes for that.
+- footnote-references: a note without \\fr (\\xo in a cross reference) when the project nearly always writes it;
+  \\fr with only the chapter (\\fr 8 -> \\fr 8:0); a note with no text.
 """
 from __future__ import annotations
 
@@ -26,7 +28,7 @@ from collections import Counter
 from collections.abc import Iterator
 
 from checker.model import WARNING, CheckContext, Finding
-from checker.structure import PERIPHERAL_BOOKS
+from checker.structure import PERIPHERAL_BOOKS, note_has_text
 from checker.usfm import remove_attributes
 from checker.verses import RawRefs
 
@@ -167,6 +169,8 @@ SELF_CLOSING_NOTE_MARKERS = frozenset({"fr", "ft", "fq", "fqa", "fk", "fl", "fw"
                                        "xo", "xk", "xq", "xta", "xop", "xot", "xnt"})
 NOT_TEXT_SPANS = frozenset({"fig", "cat", "ca", "va", "vp", "fv", "rb"})  # not a style the note would stand in
 MARKER_TOKEN_RE = re.compile(r"\\(\+?)([a-z]+\d*)(\*?)")
+CALLER_ONLY_RE = re.compile(r"\s*[^\s\\]+\s*")  # the caller of a note ("+", "-", "a") with its spaces
+NOTE_REFERENCE_RE = re.compile(r"\\(?:fr|xo)\s[^\\]*")
 
 
 def check_note_markers(sources: list[tuple[str, str]], ctx: CheckContext) -> Iterator[Finding]:
@@ -176,14 +180,31 @@ def check_note_markers(sources: list[tuple[str, str]], ctx: CheckContext) -> Ite
     for source in _sources(sources):
         text = source.text
         in_note, last = False, None
+        note_start, note_end, references = 0, 0, 0
         for match in MARKER_TOKEN_RE.finditer(text):
             plus, name, closing = match.groups()
             if name in NOTE_START_MARKERS:
                 in_note, last = not closing, None
+                note_start, note_end, references = match.start(), match.end(), 0
                 continue
             if not in_note or plus:
                 continue
             marker = f"\\{name}"
+            if name == "cat" and not closing and not CALLER_ONLY_RE.fullmatch(text, note_end, match.start()):
+                # \f + \fr 8:0 \cat dup\cat*\ft …: \cat belongs right after the caller, the same in every note.
+                category = re.match(r"\\cat\s[^\\]*\\cat\*", text[match.start():])
+                shown = category.group() if category else "\\cat"
+                start = " ".join(text[note_start:note_end].split()) + " " + \
+                    (CALLER_ONLY_RE.match(text, note_end).group().strip())
+                yield source.finding(match.start(), match.end(), "note-markers", shown,
+                                     f"'{shown}' is not right after the caller: move it to the start of the note "
+                                     f"('{start} {shown}\\fr …')")
+            if name in ("fr", "xo") and not closing:
+                references += 1
+                if references > 1 and name != last:
+                    reference = " ".join(NOTE_REFERENCE_RE.match(text, match.start()).group().split())
+                    yield source.finding(match.start(), match.end(), "note-markers", reference,
+                                         f"a second '{marker}' in one note: remove '{reference}'")
             if closing:
                 if name in SELF_CLOSING_NOTE_MARKERS:
                     yield source.finding(match.start(), match.end(), "note-markers", f"{marker}*",
@@ -482,24 +503,82 @@ def check_list_markers(sources: list[tuple[str, str]], ctx: CheckContext) -> Ite
 # --- duplicate-footnotes ---
 
 DUP_DISTANCE = 7000  # characters of the file from one note to the next: about one printed page
-FOOTNOTE_RE = re.compile(r"\\f\s+\S+\s*((?:\\cat\s[^\\]*\\cat\*\s*)?)(?:\\fr\s[^\\]*)?(.*?)\\f\*", re.S)
+FOOTNOTE_RE = re.compile(r"\\f\s+\S+(.*?)\\f\*", re.S)
+CATEGORY_RE = re.compile(r"\\cat\s([^\\]*)\\cat\*")
 
 
 def check_duplicate_footnotes(sources: list[tuple[str, str]], ctx: CheckContext) -> Iterator[Finding]:
     for source in _sources(sources):
         last: dict[str, tuple[int, int]] = {}  # note text -> (start, end) of the last note with it
         for match in FOOTNOTE_RE.finditer(source.text):
-            body = " ".join(match.group(2).split())
+            # \cat may stand after \fr too (note-markers asks to move it); it is not part of the text.
+            categories = " ".join(CATEGORY_RE.findall(match.group(1)))
+            body = " ".join(NOTE_REFERENCE_RE.sub(" ", CATEGORY_RE.sub(" ", match.group(1))).split())
             if not body:
                 continue
             earlier = last.get(body)
             last[body] = (match.start(), match.end())
             if earlier is None or match.start() - earlier[1] > DUP_DISTANCE:
                 continue
-            if re.search(r"\bdup\b", match.group(1)):
+            if re.search(r"\bdup\b", categories):
                 continue
             shown = re.sub(r"\\\+?[a-z]+\d*\*?\s?", "", body)
             yield source.finding(match.start(), match.end(), "duplicate-footnotes", shown[:60],
                                  f"the same note is at {source.book} {source.ref(earlier[0])}, shortly before: add '\\cat dup\\cat*' "
                                  "after the caller (\\f + \\cat dup\\cat*\\fr …). When both notes are on one page, "
                                  "typesetting removes this one and gives it the caller of the first")
+
+
+# --- footnote-references ---
+
+ANY_NOTE_RE = re.compile(r"\\(f|fe|ef|x|ex)\s(.*?)\\\1\*", re.S)
+NOTE_INSIDE_RE = re.compile(r"\\(?:f|fe|ef|x|ex)\s")
+NOTE_REFERENCE = {"f": "fr", "fe": "fr", "ef": "fr", "x": "xo", "ex": "xo"}
+
+
+def check_footnote_references(sources: list[tuple[str, str]], ctx: CheckContext) -> Iterator[Finding]:
+    """A note without its reference (\\f + \\ft …: no \\fr; \\x - \\xt …: no \\xo) when the project nearly always
+    writes one in such notes; a note with no text at all. Introductions and front/back matter are not counted."""
+    separator = ctx.settings.reference_format.chapter_verse
+    without: dict[str, list[tuple[_Source, re.Match]]] = {}
+    counts: Counter = Counter()
+    for source in _sources(sources):
+        if source.book in PERIPHERAL_BOOKS:
+            continue
+        for match in ANY_NOTE_RE.finditer(source.text):
+            name, inner = match.groups()
+            if NOTE_INSIDE_RE.search(inner):
+                continue  # a note started inside a note: usfm reports it
+            note = match.group()
+            if not note_has_text(note):
+                yield source.finding(match.start(), match.end(), "footnote-references", " ".join(note.split()),
+                                     f"a note with no text: write the note or remove '{' '.join(note.split())}'")
+                continue
+            chapter = source.ref(match.start()).split(":")[0]
+            if chapter == "0":
+                continue  # an introduction: its notes often have no reference
+            reference = NOTE_REFERENCE[name]
+            counts[name] += 1
+            written = re.search(rf"\\{reference}\s+([^\\]*)", inner)
+            if not written:
+                without.setdefault(name, []).append((source, match))
+            elif re.fullmatch(r"\d+", written.group(1).strip()):
+                # '\fr 8 ' names only the chapter: a note before verse 1 is '\fr 8:0 ' (user rule 2026-11-19).
+                shown = " ".join(written.group().split())
+                verse = source.ref(match.start()).split(":")[1]
+                better = f"\\{reference} {written.group(1).strip()}{separator}{verse}"
+                yield source.finding(match.start(), match.end(), "footnote-references", shown,
+                                     f"'{shown}' names only the chapter: change it to '{better}'")
+    for name, places in without.items():
+        total = counts[name]
+        if total < MIN_USUAL or total - len(places) < total * MIN_SHARE:
+            continue  # the project does not write the reference in nearly all notes
+        reference = NOTE_REFERENCE[name]
+        for source, match in places:
+            chapter, verse = source.ref(match.start()).split(":")
+            place = f"{chapter}{separator}{verse}"
+            start = " ".join(match.group()[:len(name) + 1 + len(CALLER_ONLY_RE.match(match.group(2)).group())].split())
+            yield source.finding(match.start(), match.end(), "footnote-references", start,
+                                 f"no '\\{reference}' in this note: add '\\{reference} {place} ' after the caller "
+                                 f"('{start} \\{reference} {place} …'); {total - len(places)} of {total} such notes "
+                                 "have it")

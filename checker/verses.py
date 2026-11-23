@@ -1,8 +1,10 @@
 """Checks of the text of verses and of what is linked to it (Unit 2): nothing is changed, the reports only say where.
 
 - repeated-text: a verse with the same words as the verse before it (copied twice), or a group of 3+ words written
-  twice in a row ("he went to the city he went to the city"). Verse ranges (\\v 6-7) share one text and are skipped.
-  The same sentence twice inside a verse is not listed: in the Bible that is nearly always on purpose (ISA 8:9).
+  twice in a row with no sentence end between, in verses, notes and headings ("he went to the city he went to the
+  city", in a note "\\fq the curtain\\ft : the curtain …"). Verse ranges (\\v 6-7) share one text and are skipped. A
+  comma between is listed too (user decision 2026-11-20), although "precept upon precept, precept upon precept"
+  (ISA 28:10) is on purpose. The same sentence twice is not listed: that is nearly always on purpose (ISA 8:9).
 - verse-lengths: a verse 3 times shorter or longer than usual, compared with an English base translation
   (verse_lengths.txt: letters per verse, numbers only). "Usual" is the project's own median ratio, so the language
   does not matter. Finds half-translated verses, verses merged or split, verses numbered another way.
@@ -18,15 +20,21 @@ import statistics
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-from checker.model import WARNING, CheckContext, Finding
+from checker.model import WARNING, Analysis, CheckContext, Finding
 from checker.structure import PERIPHERAL_BOOKS
 from checker.tokens import LETTER
+from checker.usfm import Segment
 
 WORD_RE = re.compile(rf"{LETTER}+")
 MIN_SAME_WORDS = 5  # a repeated verse has at least this many words
 MIN_PHRASE = 3  # words of a phrase written twice in a row
-TWICE_RE = re.compile(rf"(?<!{LETTER})((?:{LETTER}+\s+){{{MIN_PHRASE - 1},}}{LETTER}+)\s+\1(?!{LETTER})",
-                      re.IGNORECASE)
+
+
+def twice_re(sentence_marks: frozenset[str]) -> re.Pattern:
+    """3+ words, then only spaces and marks that do not end a sentence, then the same words again."""
+    between = r"[^\w" + "".join(re.escape(ch) for ch in sorted(sentence_marks)) + "]*"
+    return re.compile(rf"(?<!{LETTER})((?:{LETTER}+\s+){{{MIN_PHRASE - 1},}}{LETTER}+)(?!{LETTER})({between})\1"
+                      rf"(?!{LETTER})", re.IGNORECASE)
 VERSE_LENGTHS = Path(__file__).with_name("verse_lengths.txt")
 MIN_BASE_LETTERS = 40  # shorter base verses say too little
 LENGTH_FACTOR = 3  # 3 times shorter or longer than the usual ratio
@@ -45,7 +53,8 @@ def _verse_key(key: tuple[str, int, int]) -> str:
     return f"{key[1]}:{key[2]}"
 
 
-def check_repeated_text(verse_texts: dict[tuple[str, int, int], str], ranges: set) -> Iterator[Finding]:
+def check_repeated_text(verse_texts: dict[tuple[str, int, int], str], ranges: set, segments: list[Segment] = (),
+                        sentence_marks: frozenset[str] = frozenset(".!?")) -> Iterator[Finding]:
     keys = sorted(verse_texts)
     previous: tuple[tuple[str, int, int], list[str]] | None = None
     for key in keys:
@@ -59,12 +68,19 @@ def check_repeated_text(verse_texts: dict[tuple[str, int, int], str], ranges: se
             yield Finding(key[0], _verse_key(key), WARNING, "repeated-text", _verse_key(key),
                           f"verse {key[2]} has the same words as verse {key[2] - 1}: copied twice?", text)
         previous = (key, words)
-        # Only a copy with nothing but spaces between: "Answer me, answer me" and "My father! My father!" repeat on
-        # purpose and have a comma or a mark between the two.
-        if match := TWICE_RE.search(text):
+    # Words written twice in a row in verses, notes and headings, with only spaces and marks that do not end a
+    # sentence between them: "he went, he went"; in a note "\fq the curtain\ft : the curtain". Not after a sentence
+    # end ("My father! My father!").
+    pattern = twice_re(sentence_marks)
+    for segment in segments:
+        if segment.book in PERIPHERAL_BOOKS:
+            continue
+        for match in pattern.finditer(segment.text):
             phrase = " ".join(match.group(1).split())
-            yield Finding(key[0], _verse_key(key), WARNING, "repeated-text", phrase,
-                          f"'{phrase}' is written twice in a row", text)
+            where = " (in a note)" if segment.in_note else ""
+            yield Analysis(segment, [], []).finding(match.start(), match.end() - match.start(), WARNING,
+                                                    "repeated-text", phrase,
+                                                    f"'{phrase}' is written twice in a row{where}")
 
 
 def read_verse_lengths(path: Path = VERSE_LENGTHS) -> dict[tuple[str, int, int], int]:

@@ -27,6 +27,7 @@ CHECKS = [
     "quotes",                # quotation marks: unclosed, wrong level, mismatched
     "pairs",                 # Pairs: ( ) [ ] { } unclosed or mismatched
     "repeated-words",        # "і і"; RepeatableWords / NonRepeatableWords
+    "repeated-text",         # verse equal to the verse before it, words written twice in a row
     "spacing",               # double spaces, thousands separator in numbers
     "numbers",               # 4-digit numbers written in the rare way of the project (4000 among 4.000)
     "scripts",               # words mixing scripts (Latin "c" in a Cyrillic word)
@@ -50,6 +51,7 @@ CHECKS = [
     "m-after-heading",       # \m right after a heading: \p
     "list-markers",          # \lh after its list (should be \lf), \lf before it; \pmo and \pmc the same
     "duplicate-footnotes",   # the same note shortly before, without \cat dup\cat*
+    "footnote-references",   # a note without \fr (\xo) where the project nearly always writes it; a note with no text
     "normalization",         # NormalizationForm (NFC)
     "paragraph-final",       # last punctuation of a paragraph; headings ending with "."
     "ordinals",              # NumberOrdinals: "5-го", "8th", "ke-430"
@@ -57,7 +59,6 @@ CHECKS = [
     "glossary-words",        # \w glossary word without an entry \k in GLO
     "figures",               # \fig without a file, in another verse, file not in the figures folder
     "untranslated-verses",   # verse left in another language (other alphabet, words found nowhere else)
-    "repeated-text",         # verse equal to the verse before it, words written twice in a row
     "verse-lengths",         # verse 3x shorter/longer than usual (lengths of an English translation)
     "book-titles",           # \toc1 = \mt2 + \mt1, \toc2 = \h
     "special-spaces",        # narrow no-break space U+202F, "\fv 13 \fv*", н.~э., marks in verse lists

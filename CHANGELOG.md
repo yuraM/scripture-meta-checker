@@ -6,6 +6,10 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
+- **repeated-text moved to Unit 4** (Words), into the group Repeated words next to repeated-words: both find
+  words written twice. It now also looks in footnotes and headings, and finds words written twice with a comma or a
+  colon between them ('\fq the curtain\ft : the curtain …'); before, only spaces counted. All places of a verse are
+  listed, not only the first one.
 - **Unit 1 checks the whole project.** Its checks look at the lists of the project (Wordlist, inventories, word
   breaks, Biblical Terms, unused entries) and always read all books, also when you choose books. Units 2-6 check
   only the chosen books. Before, one chosen book gave thousands of false problems ("never used in the text").
@@ -14,7 +18,13 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
   nowhere in the text moved from terms to term-renderings.
 - **New check note-markers** (Unit 2, Markers and titles): a marker of a note written again while it is still
   open ('\fq four \fq hundred', '\ft Or \ft'; a marker with + between, such as \+xt …\+xt*, does not close it), and
-  \fq, \fqa, \ft … closed by hand ('\fqa …\fqa*'). They close by themselves.
+  \fq, \fqa, \ft … closed by hand ('\fqa …\fqa*'). They close by themselves. Also \cat that is not right after the
+  caller ('\f + \fr 8:5 \cat dup\cat*' should be '\f + \cat dup\cat*\fr 8:5 ', so all notes have it in one place),
+  and two \fr in one note.
+- **New check footnote-references** (Unit 5, Footnotes): a footnote without \fr (a cross reference without \xo)
+  when the project nearly always writes it ('\c 8 \p \f + \ft In Hebrew texts …': add '\fr 8:0 '), and \fr with only the chapter ('\fr 8 ': change it to
+  '\fr 8:0'). Also a note with
+  no text. Notes of introductions are not counted.
 - **New check notes-in-spans** (Unit 2, Markers and titles): a footnote or cross reference inside a character style
   ('\wj … \f + …\f* … \wj*'). Close the style before the note and open it again after it.
 - **New check list-markers** (Unit 2, Markers and titles): \lh and \lf, \pmo and \pmc put the wrong way round
@@ -100,6 +110,11 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### Fixed
 
+- **duplicate-footnotes**: '\cat dup\cat*' after \fr ('\f + \fr 83:8 \cat dup\cat*\ft …') was not seen, so the
+  note was listed although it is marked.
+- **usfm**: a note started inside a note ('\f + \fr 21:2 \f + \cat dup\cat* \ft …') now says so, and says that the
+  first note is empty: "a new note '\f' starts inside the note '\f + \fr 21:2', which has no text and no closing
+  \f*". Before it said only "note \f has no closing \f*".
 - **references**: a full stop between verses that the project uses as its sequence mark ('Luka 6,37–38.41–42')
   was read as a wrong mark between chapter and verse. The number of a book name after ';' ('16,4; 4 Mojzes 11')
   was read as a verse without a chapter.

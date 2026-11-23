@@ -9,13 +9,13 @@ from functools import lru_cache
 
 from checker import places
 from checker.typesetting import (
-    check_chapter_end_headings, check_digit_hyphens, check_duplicate_footnotes, check_footnote_spaces,
-    check_list_markers, check_m_after_heading, check_marker_spaces, check_note_markers, check_notes_in_spans,
+    check_chapter_end_headings, check_digit_hyphens, check_duplicate_footnotes, check_footnote_references,
+    check_footnote_spaces, check_list_markers, check_m_after_heading, check_marker_spaces, check_note_markers, check_notes_in_spans,
     check_outline_references, check_quote_spaces,
 )
 from checker.forms import (
     check_all_caps, check_apostrophes, check_dashes, check_digit_systems, check_ellipses, check_fractions, check_heading_case,
-    check_marker_capitals, check_note_callers, check_sentence_numbers, check_untranslated,
+    check_marker_capitals, check_note_callers, check_sentence_numbers, check_untranslated, sentence_marks,
 )
 from checker.verse_numbers import check_numbers_in_notes, check_numbers_in_verse, check_us_measures
 from checker.verses import check_figures, check_glossary_words, check_repeated_text, check_verse_lengths
@@ -1223,7 +1223,8 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "poetry-numbers": lambda usage, ctx: check_poetry_numbers(usage.poetry_lines, ctx),
     "self-references": check_self_references,
     "one-chapter-books": check_one_chapter_books,
-    "repeated-text": lambda usage, ctx: check_repeated_text(usage.verse_texts, usage.verse_ranges),
+    "repeated-text": lambda usage, ctx: check_repeated_text(usage.verse_texts, usage.verse_ranges, usage.segments,
+                                                            sentence_marks(ctx)),
     "verse-lengths": lambda usage, ctx: check_verse_lengths(usage.verse_texts, usage.verse_ranges,
                                                             ctx.to_original, ctx),
     "glossary-words": lambda usage, ctx: check_glossary_words(usage.sources, ctx),
@@ -1256,6 +1257,7 @@ PROJECT_CHECKS: dict[str, Callable[[UsageCounter, CheckContext], Iterator[Findin
     "m-after-heading": lambda usage, ctx: check_m_after_heading(usage.sources, ctx),
     "list-markers": lambda usage, ctx: check_list_markers(usage.sources, ctx),
     "duplicate-footnotes": lambda usage, ctx: check_duplicate_footnotes(usage.sources, ctx),
+    "footnote-references": lambda usage, ctx: check_footnote_references(usage.sources, ctx),
     "line-ends": lambda usage, ctx: check_line_ends(usage.flow, usage.case_refs, ctx),
     "poetry-two-sentences": lambda usage, ctx: check_poetry_two_sentences(usage.poetry_lines, ctx),
     "poetry-long-lines": lambda usage, ctx: check_poetry_long_lines(usage.poetry_lines, ctx),

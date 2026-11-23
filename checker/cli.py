@@ -44,7 +44,10 @@ TEXT_CHECKS = [*CHECKS, *BOOK_CHECKS, *SOURCE_CHECKS]
 CHECK_DESCRIPTIONS = {
     "marker-capitals": "The first word of a \\pc paragraph (every line of an inscription) and of the signature of a letter (\\sig ... \\sig*) must start with a capital letter.",
     "all-caps": "A word typed all in capitals (SENHOR, a heading or an inscription in capitals). Capitals are made only by markers (\\nd for the divine name, \\sc), never typed. Roman numerals are not counted.",
-    "repeated-text": "A verse with the same words as the verse before it, or a group of words written twice in a row. Verse ranges (\\v 6-7) are not counted.",
+    "repeated-text": "A verse with the same words as the verse before it, or 3 or more words written twice in a row, in "
+                     "verses, footnotes and headings. A comma or a colon between them is counted, the end of a sentence "
+                     "is not. Many such places are on purpose ('precept upon precept, precept upon precept'). Verse "
+                     "ranges (\\v 6-7) are not counted.",
     "verse-lengths": "A verse 3 times shorter or longer than usual, compared with the length of the same verse in an English translation (only lengths are kept in the program). A part may be missing or added, or the verse is numbered another way.",
     "glossary-words": "A word marked as a glossary word (\\w ... \\w*) that has no entry (\\k) in the glossary book GLO.",
     "figures": "A picture (\\fig) without a file name, placed in another verse than its reference, or (when the project has a figures folder) whose file is not there.",
@@ -87,7 +90,9 @@ CHECK_DESCRIPTIONS = {
     "note-markers": "Markers inside notes that close by themselves (\\fr \\ft \\fq \\fqa \\fk \\fl \\fw \\fp \\xo \\xk "
                     "\\xq …): the same marker again while it is still open ('\\fq four \\fq hundred'; a marker with + "
                     "between, such as \\+xt …\\+xt* or \\+fv 13\\+fv*, does not close it; \\fv 13\\fv* does), or the "
-                    "marker closed by hand ('\\fqa …\\fqa*').",
+                    "marker closed by hand ('\\fqa …\\fqa*'). Also \\cat that is not right after the caller "
+                    "('\\f + \\fr 8:5 \\cat dup\\cat*' should be '\\f + \\cat dup\\cat*\\fr 8:5 '), and two \\fr in "
+                    "one note.",
     "notes-in-spans": "A footnote or cross reference inside a character style of the text ('\\wj … \\f + …\\f* … "
                       "\\wj*'). Close the style before the note and open it again after it, or the note is printed "
                       "in that style.",
@@ -105,6 +110,10 @@ CHECK_DESCRIPTIONS = {
     "duplicate-footnotes": "A footnote with the same text as a note shortly before it (about one page), without "
                            "\\cat dup\\cat*. When both notes are on one page, typesetting removes the second one and "
                            "gives its place the caller of the first: \\cat dup\\cat* marks such notes.",
+    "footnote-references": "A footnote without \\fr (a cross reference without \\xo), when the project nearly always "
+                           "writes it: '\\f + \\ft …' should be '\\f + \\fr 8:1 \\ft …'. Also \\fr with only the "
+                           "chapter ('\\fr 8 ' should be '\\fr 8:0 ') and a note with no text. "
+                           "Notes of introductions are not counted.",
     "self-references": "A cross reference \\x that points to the verse it stands in.",
     "one-chapter-books": "References to books with one chapter (Obadiah, Philemon, 2 and 3 John, Jude) written two "
                          "ways: with the chapter (Jude 1:3) and without it (Jude 3). The rare way is shown.",
