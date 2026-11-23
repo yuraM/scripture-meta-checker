@@ -10,12 +10,13 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 import traceback
 import webbrowser
 from pathlib import Path
-from tkinter import BooleanVar, Button, Frame, Label, StringVar, Tk, filedialog, messagebox, ttk
+from tkinter import BooleanVar, Button, Frame, Label, Menu, StringVar, Tk, filedialog, messagebox, ttk
 
-from checker import history
+from checker import access, history
 from checker.books import DEUTEROCANON, EXTRA_MATERIAL, NEW_TESTAMENT, OLD_TESTAMENT
 from checker.cli import (
     CHECK_DESCRIPTIONS, latest_run, new_run_folder, project_books, run_checks, write_reports,
@@ -74,6 +75,8 @@ def default_report_dir(project: Path, paratext: Path | None) -> Path:
 
 
 class CheckerWindow:
+    REPORT_ITEMS = {"report": 0, "txt": 1, "accepted": 3}  # places in the menu Reports
+
     def __init__(self, root: Tk) -> None:
         self.root = root
         self.paratext = paratext_folder()
@@ -108,12 +111,43 @@ class CheckerWindow:
 
         # The checks by stage (the order to fix the problems). Nothing is selected when the window opens;
         # the choice stays while the window is open.
-        checks = ttk.LabelFrame(frame, text="Checks, in the order to fix the problems", padding=6)
-        checks.grid(row=4, column=0, columnspan=3, sticky="nsew", pady=8)
+        self.checks_frame = ttk.LabelFrame(frame, text="Checks, in the order to fix the problems", padding=6)
+        self.checks_frame.grid(row=4, column=0, columnspan=3, sticky="nsew", pady=8)
         frame.rowconfigure(4, weight=1)
         self.selected: dict[str, BooleanVar] = {}
         self.folds: list[_Fold] = []
-        for index, (title, names) in enumerate(STAGES):
+        # The role of the key decides which checks are shown (user: only the released ones). The kept role is used
+        # at once; the answer of the site may change it a moment later (check_role).
+        self.key_state = access.load_key_state()
+        self.role = access.kept_role(self.key_state, access.now_utc())
+
+        self.running = False
+        # One row: Run, its hint or the progress bar, the buttons that open the reports.
+        running_row = ttk.Frame(frame)
+        running_row.grid(row=5, column=0, columnspan=3, sticky="ew")
+        running_row.columnconfigure(2, weight=1)
+        self.run_button = ttk.Button(running_row, text="Run checks", command=self._run, state="disabled")
+        self.run_button.grid(row=0, column=0)
+        self.run_hint = ttk.Label(running_row, text="Choose at least one check", foreground="gray")
+        self.run_hint.grid(row=0, column=1, padx=(8, 0))
+        self._build_checks()
+        self.progress = ttk.Progressbar(running_row, mode="determinate")
+        self.progress.grid(row=0, column=2, sticky="ew", padx=8)
+        self._build_rest(frame, running_row)
+        root.after(100, self._poll)
+
+    def _build_checks(self) -> None:
+        """The stage boxes with the checks the role may run. Built again when the role changes; the ticks of
+        checks that stay are kept."""
+        checks = self.checks_frame
+        for child in checks.winfo_children():
+            child.destroy()
+        kept = {name for name, var in self.selected.items() if var.get()}
+        self.selected = {}
+        self.folds = []
+        allowed = set(access.visible_checks(self.role, (n for _, names in STAGES for n in names)))
+        for index, (title, all_names) in enumerate(STAGES):
+            names = tuple(name for name in all_names if name in allowed)
             row, column = divmod(index, STAGE_COLUMNS)
             # "Unit 3. Characters and punctuation" on two lines: the boxes stand in one row.
             number, _, name = title.partition(". ")
@@ -132,7 +166,8 @@ class CheckerWindow:
                     self._check_button(box, name, name).grid(row=line, column=0, sticky="w")
                 elif group not in placed:
                     placed.add(group)
-                    group_names = next(checks for _, title, checks in GROUPS if title == group)
+                    group_names = [check for check in next(members for _, title, members in GROUPS
+                                                            if title == group) if check in allowed]
                     fold = self._fold(box, group, group_names)
                     fold.grid(row=line, column=0, sticky="ew")
                     for step, check in enumerate(group_names, start=1):
@@ -148,38 +183,25 @@ class CheckerWindow:
                        command=lambda n=names: self._set(n, True)).grid(row=0, column=0)
             ttk.Button(buttons, text="None", width=5,
                        command=lambda n=names: self._set(n, False)).grid(row=0, column=1, padx=2)
-        self._refresh_folds()
         # Under the stages, above Run: the buttons for all checks.
         all_buttons = ttk.Frame(checks)
         all_buttons.grid(row=len(STAGES) // STAGE_COLUMNS + 1, column=0, columnspan=STAGE_COLUMNS, sticky="w",
                          pady=(6, 0))
-        everything = [name for _, names in STAGES for name in names]
+        everything = list(self.selected)
         ttk.Button(all_buttons, text="Select all", command=lambda: self._set(everything, True)).grid(row=0, column=0)
         ttk.Button(all_buttons, text="Clear all",
                    command=lambda: self._set(everything, False)).grid(row=0, column=1, padx=(4, 0))
+        for name in kept & set(self.selected):
+            self.selected[name].set(True)
+        self._refresh_folds()
+        self._refresh_run()
 
-        self.running = False
-        # One row: Run, its hint or the progress bar, the buttons that open the reports.
-        running_row = ttk.Frame(frame)
-        running_row.grid(row=5, column=0, columnspan=3, sticky="ew")
-        running_row.columnconfigure(2, weight=1)
-        self.run_button = ttk.Button(running_row, text="Run checks", command=self._run, state="disabled")
-        self.run_button.grid(row=0, column=0)
-        self.run_hint = ttk.Label(running_row, text="Choose at least one check", foreground="gray")
-        self.run_hint.grid(row=0, column=1, padx=(8, 0))
-        self.progress = ttk.Progressbar(running_row, mode="determinate")
-        self.progress.grid(row=0, column=2, sticky="ew", padx=8)
+    def _build_rest(self, frame, running_row) -> None:
+        root = self.root
         # Problems accepted in the reports ("not a problem"): the list can be cleared here.
-        self.accepted_button = ttk.Button(running_row, text="Accepted", command=self._show_accepted,
-                                          state="disabled")
-        self.accepted_button.grid(row=0, column=3, padx=(0, 6))
-        _Tooltip(self.accepted_button, "Problems marked Accept in the reports are hidden in the next reports. "
-                                       "Here you can show them again.")
-        self.folder_button = ttk.Button(running_row, text="Open txt folder", command=self._open_folder,
-                                        state="disabled")
-        self.folder_button.grid(row=0, column=4, padx=(0, 6))
+        # Open report stays next to Run; the txt folder and the accepted problems are in the menu Reports.
         self.open_button = ttk.Button(running_row, text="Open report", command=self._open, state="disabled")
-        self.open_button.grid(row=0, column=5)
+        self.open_button.grid(row=0, column=3)
         # The buttons open the reports in the Reports folder, also ones of an earlier run.
         self.report_dir.trace_add("write", lambda *_: self._refresh_buttons())
         # Back from the browser (where Accept was clicked): count the accepted problems again.
@@ -189,6 +211,24 @@ class CheckerWindow:
         self.status = StringVar(value="Choose a project and press Run checks.")
         ttk.Label(frame, textvariable=self.status, wraplength=900).grid(row=6, column=0, columnspan=3, sticky="w",
                                                                          pady=(6, 0))
+        # The menu bar, as in other programs. Reports: the newest run in the Reports folder (also an earlier one) and
+        # the problems marked Accept in the reports (hidden in the next reports; the list can be cleared here).
+        menu_bar = Menu(root)
+        self.reports_menu = Menu(menu_bar, tearoff=False)
+        self.reports_menu.add_command(label="Open report", command=self._open, state="disabled")
+        self.reports_menu.add_command(label="Open txt folder", command=self._open_folder, state="disabled")
+        self.reports_menu.add_separator()
+        self.reports_menu.add_command(label="Accepted problems...", command=self._show_accepted, state="disabled")
+        menu_bar.add_cascade(label="Reports", menu=self.reports_menu)
+        # Key: the key (its end) and the role, and another key.
+        self.key_menu = Menu(menu_bar, tearoff=False)
+        self.key_menu.add_command(label="", state="disabled")  # "Key …WUDX: user (released checks)"
+        self.key_menu.add_separator()
+        self.key_menu.add_command(label="Change key...", command=self._change_key)
+        self.key_menu.add_command(label="Get a key on scripturechecker.org", command=lambda: webbrowser.open(access.SITE))
+        menu_bar.add_cascade(label="Key", menu=self.key_menu)
+        root.configure(menu=menu_bar)
+        self._show_key()
         # Shown only when GitHub has a newer release (check_for_update).
         self.update_row = ttk.Frame(frame)
         self.update_text = StringVar()
@@ -198,7 +238,51 @@ class CheckerWindow:
         self.update_button = ttk.Button(self.update_row, text="Update" if FROZEN else "Download",
                                         command=self._update)
         self.update_button.grid(row=0, column=1, padx=(8, 0))
-        root.after(100, self._poll)
+
+    def _show_key(self) -> None:
+        key = self.key_state.get("key", "")
+        shown = f"…{key[-4:]}" if len(key) > 4 else key
+        more = "all checks" if self.role in access.FULL_ROLES else "released checks"
+        self.key_menu.entryconfigure(0, label=f"Key {shown}: {self.role} ({more})")
+
+    def check_role(self) -> None:
+        """Ask the site for the role of the key in the background, then send the records kept without internet."""
+        def ask() -> None:
+            role = _quietly(access.refresh_role, VERSION)
+            if role is not None:
+                self.events.put(("role", role))
+            _quietly(access.send_queue)
+        threading.Thread(target=ask, daemon=True).start()
+
+    def _set_role(self, role: str) -> None:
+        self.key_state = access.load_key_state()
+        changed = role != self.role
+        self.role = role
+        self._show_key()
+        if changed:
+            self._build_checks()
+
+    def _change_key(self) -> None:
+        if self.running:
+            messagebox.showinfo(TITLE, "Wait until the checks end, then change the key.")
+            return
+        key = ask_key(self.root, self.key_state.get("key", ""))
+        if not key or access.same_key(key, self.key_state.get("key", "")):
+            return
+        self.key_state = access.save_key(key)
+        self._set_role(access.kept_role(self.key_state, access.now_utc()))  # user until the site answers
+        self.check_role()
+
+    def _send_record(self, results, seconds: float) -> None:
+        """Keep the record of the run and send the queue in the background (kept when there is no internet)."""
+        key = self.key_state.get("key", "")
+        if not key:
+            return
+        try:
+            access.add_record(key, access.run_record(results, VERSION, seconds))
+        except OSError:  # no rights to write the queue: the run itself is fine
+            return
+        threading.Thread(target=_quietly, args=(access.send_queue,), daemon=True).start()
 
     def check_for_update(self) -> None:
         """Ask GitHub in the background whether a newer release exists; the answer comes through the queue."""
@@ -307,13 +391,13 @@ class CheckerWindow:
         self.report_dir.set(str(report_dir))
         self.running = True
         self._refresh_run()
-        self.open_button.configure(state="disabled")
-        self.folder_button.configure(state="disabled")
+        self._refresh_buttons()
         self.progress.configure(value=0, maximum=1)
         threading.Thread(target=self._work, args=(project, checks, books, report_dir), daemon=True).start()
 
     def _work(self, project: Path, checks: list[str], books: list[str] | None, report_dir: Path) -> None:
         """Runs in the background thread; talks to the window only through the queue."""
+        started = time.monotonic()
         try:
             skipped: dict[str, str] = {}
             notes: dict[str, str] = {}
@@ -322,7 +406,7 @@ class CheckerWindow:
             self.events.put(("progress", 1, 1, "writing the reports"))
             run = new_run_folder(report_dir)
             results = write_reports(project, findings, checks, run, True, skipped, notes, books)
-            self.events.put(("done", results, run / "index.html"))
+            self.events.put(("done", results, run / "index.html", time.monotonic() - started))
         except Exception:  # shown to the user, the window stays open
             self.events.put(("error", traceback.format_exc()))
 
@@ -335,7 +419,8 @@ class CheckerWindow:
                     self.progress.configure(value=done, maximum=total)
                     self.status.set(f"Checking: {what}")
                 elif event[0] == "done":
-                    _, results, index = event
+                    _, results, index, seconds = event
+                    self._send_record(results, seconds)
                     errors = sum(r.errors for r in results)
                     warnings = sum(r.warnings for r in results)
                     compared = [r for r in results if r.new is not None]
@@ -346,6 +431,8 @@ class CheckerWindow:
                     self._refresh_run()
                     self._refresh_buttons()
                     self._open()
+                elif event[0] == "role":
+                    self._set_role(event[1])
                 elif event[0] == "update":
                     self.release = event[1]
                     self.update_text.set(
@@ -390,10 +477,14 @@ class CheckerWindow:
         paths = self._report_paths()
         running = self.running
         self.open_button.configure(state="normal" if paths and paths[0].is_file() and not running else "disabled")
-        self.folder_button.configure(state="normal" if paths and paths[1].is_dir() and not running else "disabled")
+        self.reports_menu.entryconfigure(self.REPORT_ITEMS["report"],
+                                         state="normal" if paths and paths[0].is_file() and not running else "disabled")
+        self.reports_menu.entryconfigure(self.REPORT_ITEMS["txt"],
+                                         state="normal" if paths and paths[1].is_dir() and not running else "disabled")
         count = sum(self._accepted_counts().values())
-        self.accepted_button.configure(text=f"Accepted ({count})" if count else "Accepted",
-                                       state="normal" if count and not running else "disabled")
+        self.reports_menu.entryconfigure(self.REPORT_ITEMS["accepted"],
+                                         label=f"Accepted problems ({count})..." if count else "Accepted problems...",
+                                         state="normal" if count and not running else "disabled")
 
     def _accepted_counts(self):
         text = self.report_dir.get().strip()
@@ -455,6 +546,79 @@ class CheckerWindow:
                 os.startfile(paths[1])  # Explorer
             else:
                 webbrowser.open(paths[1].as_uri())
+
+
+# Windows key codes of the letter keys, the same in every keyboard layout.
+_CLIPBOARD_KEYS = {86: "<<Paste>>", 67: "<<Copy>>", 88: "<<Cut>>", 65: "<<SelectAll>>"}  # V C X A
+
+
+def fix_clipboard_keys(root) -> None:
+    """Ctrl+V, C, X, A in the text fields also with a non-Latin keyboard layout.
+
+    Tk binds Ctrl+V to the letter "v"; with a Cyrillic layout the same key gives "м" and nothing happens. A binding
+    on any Ctrl+key of the class looks at the key code instead. With a Latin layout Tk's own, more exact binding
+    (<Control-v>) wins, so nothing is done twice.
+    """
+    def on_key(event) -> str | None:
+        action = _CLIPBOARD_KEYS.get(event.keycode)
+        if action is None or (event.keysym.isascii() and event.keysym.lower() in "vcxa"):
+            return None
+        if action == "<<SelectAll>>":
+            event.widget.select_range(0, "end")
+            event.widget.icursor("end")
+        else:
+            event.widget.event_generate(action)
+        return "break"
+
+    for widget_class in ("TEntry", "TCombobox", "Entry"):
+        root.bind_class(widget_class, "<Control-KeyPress>", on_key, add="+")
+
+
+def _quietly(function, *args):
+    """Talking to the site must never stop the window: any error = no answer."""
+    try:
+        return function(*args)
+    except Exception:
+        return None
+
+
+def ask_key(parent, current: str = "") -> str:
+    """A small dialog for the key; "" = cancelled. Any key is accepted (the site gives unknown keys the role user)."""
+    from tkinter import Toplevel
+
+    dialog = Toplevel(parent)
+    dialog.title(f"{TITLE}: key")
+    dialog.resizable(False, False)
+    frame = ttk.Frame(dialog, padding=14)
+    frame.grid(sticky="nsew")
+    ttk.Label(frame, text="Type or paste your key (for example SCK-7K2M-9QXD-4HNP-R8TW).\n"
+                          "You get a key at scripturechecker.org.", justify="left").grid(
+        row=0, column=0, columnspan=3, sticky="w")
+    value = StringVar(value=current)
+    entry = ttk.Entry(frame, textvariable=value, width=40)
+    entry.grid(row=1, column=0, columnspan=3, sticky="ew", pady=8)
+    result = {"key": ""}
+
+    def ok(_event=None) -> None:
+        key = access.clean_key(value.get())
+        if not key:
+            messagebox.showerror(TITLE, "Type your key.", parent=dialog)
+            return
+        result["key"] = key
+        dialog.destroy()
+
+    ttk.Button(frame, text="Get a key", command=lambda: webbrowser.open(access.SITE)).grid(row=2, column=0, sticky="w")
+    ttk.Button(frame, text="OK", command=ok).grid(row=2, column=1, sticky="e", padx=(0, 6))
+    ttk.Button(frame, text="Cancel", command=dialog.destroy).grid(row=2, column=2, sticky="e")
+    frame.columnconfigure(0, weight=1)
+    entry.bind("<Return>", ok)
+    dialog.bind("<Escape>", lambda _event: dialog.destroy())
+    if parent.winfo_viewable():
+        dialog.transient(parent)
+    dialog.grab_set()
+    entry.focus_set()
+    parent.wait_window(dialog)
+    return result["key"]
 
 
 class BookPicker(ttk.LabelFrame):
@@ -638,8 +802,24 @@ def main() -> None:
             pass
     # Links in the reports (MAT 5:3) open the verse in Paratext through this program: register it (again, if it moved).
     register_links()
+    fix_clipboard_keys(root)
+    # The window does not start without a key (the command line needs none).
+    if not access.load_key_state():
+        root.withdraw()
+        key = ask_key(root)
+        if not key:
+            root.destroy()
+            return
+        try:
+            access.save_key(key)
+        except OSError as error:
+            messagebox.showerror(TITLE, f"The key could not be saved:\n\n{error}")
+            root.destroy()
+            return
+        root.deiconify()
     window = CheckerWindow(root)
     window.check_for_update()
+    window.check_role()
     root.mainloop()
 
 

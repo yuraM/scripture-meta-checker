@@ -124,15 +124,22 @@ or Claude Code — no `Co-Authored-By: Claude …` trailer, no "Generated with C
 user's name.
 `build_exe.bat` builds `dist/checker.exe` with PyInstaller (build-only dependency, approved 2026-11-02; `build/` and
 `dist/` are build output).
-**Keys, roles and statistics website** (user decisions 2026-11-23; not in the program yet): `scripturechecker.org`,
-code in a separate private repository `C:\Biblica\scripturechecker-site` (Cloudflare Workers + D1; its `CLAUDE.md`
-has all decisions). The contract between the program and the site is its **`API.md`** (`POST /api/v1/role`,
-`POST /api/v1/runs`). Planned for the program: the window does not start without a key (any key is accepted;
-`main.py` needs none); with internet it asks the role at start; `beta`/`admin` see all checks and the role is kept
-30 days without internet; `user` (also offline or unknown key) sees only the released checks (the checks of v1.0.2;
-for each next release the user says which checks go in); after each run a record (key, version, time, checks with
-error/warning counts) is sent, kept and sent later without internet. Not decided yet: the project name in the
-record, where the key is typed in the window.
+**Keys, roles and statistics website** (user decisions 2026-11-23; in the program since 2026-11-23, `checker/access.py`):
+`scripturechecker.org`, code in a separate private repository `C:\Biblica\scripturechecker-site` (Cloudflare Workers +
+D1; its `CLAUDE.md` has all decisions). The contract between the program and the site is its **`API.md`**
+(`POST /api/v1/role`, `POST /api/v1/runs`); change it only together with the site. The window does not start without a
+key: a dialog asks for it (any non-empty key is accepted; Cancel closes the program; `main.py` needs none and sends
+nothing). The key and the kept role are in `%APPDATA%/Scripture checker/key.json`; the menu bar **Key** (user wish 2026-11-23: a
+menu as in other programs) shows the end of the key and the role, **Change key...** and a link to the site. Ctrl+V/C/X
+work in the text fields with any keyboard layout (`gui.fix_clipboard_keys`: Tk binds them to Latin letters only). At start the kept role is used at once and the site is asked in the
+background (5 s timeout, any error = no answer); `beta`/`admin` see all checks and are kept 30 days from the last
+answer; `user` (also an unknown key, or no answer for 30 days) sees only `access.RELEASED_CHECKS` (the checks of v1.0.2,
+with `hyphenation-list` and `term-renderings` that were parts of `hyphenation` and `terms` then; for each next release
+the user says which checks are added). A new answer rebuilds the check list at once (ticks of checks that stay are
+kept). After each run of the window a record (uuid, time, version, seconds, errors/warnings per check; "not checked"
+left out) goes to `runs_queue.json` and the queue is sent in the background (also at start), 100 per request, per key;
+`200` = forgotten, `400` = kept but the same body is not sent again, no answer/`429`/`5xx` = kept. **No project name**
+is sent (user decision 2026-11-23).
 
 ## Repository layout
 
@@ -181,6 +188,7 @@ wordlist/
 │   ├── gui.py           # tkinter window: choose project and checks, run, open the report
 │   ├── version.py       # VERSION (window title, compared with the newest GitHub release)
 │   ├── updates.py       # is there a newer release on GitHub? (notice in the window; Update button swaps the exe)
+│   ├── access.py        # key, role (user/beta/admin) and run records for scripturechecker.org (API.md of the site)
 │   ├── paratext_link.py # report links (scripturechecker:...) -> Paratext shows the verse; URL protocol registration
 │   ├── history.py       # findings.json per run: new / fixed since the last run; accepted.json (Accept links)
 │   ├── icon.ico         # window and exe icon (16-256 px, transparent corners), made from `Open Book Icon.png` in the root
@@ -613,8 +621,8 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
   `<report dir>/YYYY-MM-DD_HH-MM/` (`cli.new_run_folder`; `_2`, `_3` for two runs in one minute), so earlier runs are
   kept. Reports of the earlier layouts lying directly in the report dir (`<check>.txt/.html`, `index.html`, `txt/`,
   `html/`) are deleted; other files there are kept. The pages need no server and no internet; `</` in the JSON is
-  escaped so problem text cannot end the script. The window has "Open report" and "Open txt folder" buttons for the
-  newest run in the Reports folder (`cli.latest_run`, also a run made earlier).
+  escaped so problem text cannot end the script. The window has an "Open report" button (next to Run) and the menu Reports
+  (Open report, Open txt folder, Accepted problems; user wish 2026-11-23) for the newest run in the Reports folder (`cli.latest_run`, also a run made earlier).
 - **New since the last run and accepted problems** (user decisions 2026-11-13, `checker/history.py`): each run
   folder gets `findings.json` (checks, `--books`, errors-only, checks not run, all findings). A finding is the same
   when check, book, chapter:verse, severity and message are equal (not the context: it changes with nearby edits; a
@@ -627,8 +635,8 @@ Notes on `parallel-changes` / `parallel-differences` (`checker/parallels.py`, ad
   `<report dir>/accepted.json` (one place per line; a lock file for two quick clicks). Only a run folder with
   `findings.json` and a problem that is in it are written, so a link from another page cannot write elsewhere. A
   problem found later in a new place is shown again. Accepted places are left out of the next reports and the exit
-  code (the note says how many). The page remembers its clicks in localStorage only for the look. The window button
-  **Accepted (N)** opens a list per check with **Clear** and **Clear all** (with a question; user wish: someone may
+  code (the note says how many). The page remembers its clicks in localStorage only for the look. The window menu
+  **Reports > Accepted problems (N)** opens a list per check with **Clear** and **Clear all** (with a question; user wish: someone may
   accept too much). `index.html` has a button **Undo all Accept** (user wish 2026-11-13): after a question it opens `…accept?run=…&clear=all`, which empties `accepted.json` (only for a real run folder), and forgets the page marks.
 
 ## Environment notes (Windows)

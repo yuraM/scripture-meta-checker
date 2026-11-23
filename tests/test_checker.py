@@ -1714,3 +1714,94 @@ class WindowTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AccessTest(unittest.TestCase):
+    """Key, role and run records of the window (checker/access.py); the site is replaced by a fake post."""
+
+    def setUp(self):
+        from datetime import datetime, timezone
+        self.temp = tempfile.TemporaryDirectory()
+        self.folder = Path(self.temp.name)
+        self.now = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_keys_compare_without_case_spaces_dashes(self):
+        from checker import access
+        self.assertTrue(access.same_key("sck 7k2m 9qxd", "SCK-7K2M-9QXD"))
+        self.assertFalse(access.same_key("SCK-1", "SCK-2"))
+        self.assertEqual(access.clean_key("  sck  7k2m "), "sck 7k2m")
+
+    def test_role_kept_30_days(self):
+        from datetime import timedelta
+        from checker import access
+        access.save_key("K-1", self.folder)
+        self.assertEqual(access.kept_role(access.load_key_state(self.folder), self.now), "user")
+        access.save_role("k1", "beta", self.now, self.folder)  # the same key, other spelling
+        state = access.load_key_state(self.folder)
+        self.assertEqual(access.kept_role(state, self.now + timedelta(days=29)), "beta")
+        self.assertEqual(access.kept_role(state, self.now + timedelta(days=31)), "user")
+        # A lowered role takes effect at once.
+        answer = lambda path, body: (200, {"role": "user"})  # noqa: E731
+        self.assertEqual(access.refresh_role("1.0", self.folder, answer, self.now), "user")
+        self.assertEqual(access.kept_role(access.load_key_state(self.folder), self.now), "user")
+        # No answer: the kept role stays.
+        access.save_role("K-1", "admin", self.now, self.folder)
+        self.assertIsNone(access.refresh_role("1.0", self.folder, lambda p, b: (0, None), self.now))
+        self.assertEqual(access.kept_role(access.load_key_state(self.folder), self.now), "admin")
+        # A new key does not keep the role of the old one.
+        access.save_key("K-2", self.folder)
+        self.assertEqual(access.kept_role(access.load_key_state(self.folder), self.now), "user")
+        # An answer for the old key (changed meanwhile) is not kept.
+        self.assertFalse(access.save_role("K-1", "admin", self.now, self.folder))
+
+    def test_visible_checks(self):
+        from checker import access
+        from checker.stages import STAGES
+        every = [name for _, names in STAGES for name in names]
+        self.assertEqual(access.visible_checks("beta", every), every)
+        user = access.visible_checks("user", every)
+        self.assertIn("spelling", user)
+        self.assertNotIn("footnote-references", user)
+        self.assertTrue(access.RELEASED_CHECKS <= set(every))  # no released check was renamed
+
+    def test_records_queue(self):
+        from checker import access
+        from checker.html_report import CheckResult
+        results = [CheckResult("spelling", "", 3, 120), CheckResult("terms", "", skipped="no list")]
+        record = access.run_record(results, "1.0.2", 42.46, self.now)
+        self.assertEqual(record["checks"], {"spelling": {"errors": 3, "warnings": 120}})
+        self.assertEqual(record["time"], "2026-11-23T12:00:00Z")
+        self.assertEqual(record["seconds"], 42.5)
+        for _ in range(150):
+            access.add_record("K-1", access.run_record(results, "1.0.2", 1, self.now), self.folder)
+        sent = []
+
+        def offline(path, body):
+            sent.append(len(body["runs"]))
+            return 0, None
+        self.assertEqual(access.send_queue(self.folder, offline, self.now), 0)
+        self.assertEqual(access.queued(self.folder), 150)  # kept without internet
+
+        def bad(path, body):
+            sent.append(len(body["runs"]))
+            return 400, {"error": "x"}
+        sent.clear()
+        access.send_queue(self.folder, bad, self.now)
+        self.assertEqual(sent, [100, 50])
+        sent.clear()
+        access.send_queue(self.folder, bad, self.now)
+        self.assertEqual(sent, [])  # the same bodies are not sent again
+        self.assertEqual(access.queued(self.folder), 150)
+
+        def ok(path, body):
+            sent.append(len(body["runs"]))
+            return 200, {"saved": len(body["runs"]), "duplicates": 0, "rejected": 0}
+        access.add_record("K-1", access.run_record(results, "1.0.2", 1, self.now), self.folder)
+        sent.clear()
+        # The first 100 got 400 and are unchanged: kept, not sent; the changed second part goes.
+        self.assertEqual(access.send_queue(self.folder, ok, self.now), 51)
+        self.assertEqual(sent, [51])
+        self.assertEqual(access.queued(self.folder), 100)

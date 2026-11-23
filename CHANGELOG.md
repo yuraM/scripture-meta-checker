@@ -6,6 +6,10 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
+- **A key is needed to open the window.** Get it at scripturechecker.org and type it when the program starts
+  (the menu Key > Change key types another one). Testers (beta) and admins see all checks; other keys see the released
+  checks. After each run the program sends the site the numbers of errors and warnings per check (no project name,
+  no text); without internet it keeps them and sends them later. The command line (main.py) needs no key.
 - **repeated-text moved to Unit 4** (Words), into the group Repeated words next to repeated-words: both find
   words written twice. It now also looks in footnotes and headings, and finds words written twice with a comma or a
   colon between them ('\fq the curtain\ft : the curtain …'); before, only spaces counted. All places of a verse are
