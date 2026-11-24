@@ -1537,6 +1537,11 @@ class HistoryTest(unittest.TestCase):
         before = RunData(["lists"], None, False, [], [stable_key(("lists", "hyphenatedWords.txt", "line 10", "warning", "x"))])
         self.assertEqual((len(compare(before, moved)["lists"].new), compare(before, moved)["lists"].fixed), (0, 0))
         self.assertEqual(stable_key(("lists", "Settings.xml", "line of x", "warning", "m"))[2], "line of x")
+        # Counts over the whole text change when another place changes: not a new problem.
+        from checker.history import stable_message
+        self.assertEqual(stable_message("usually 'Бог' (1368 of 1396)"), stable_message("usually 'Бог' (1356 of 1384)"))
+        self.assertEqual(stable_message("small everywhere else (7441×)"), stable_message("small everywhere else (7386×)"))
+        self.assertNotEqual(stable_message("'а' (1×)"), stable_message("'б' (1×)"))
         warn = RunData(["spelling"], None, False, [], [("spelling", "MAT", "1:1", "warning", "w")])
         self.assertEqual(compare(warn, RunData(["spelling"], None, True, [], []))["spelling"].fixed, 0)
 

@@ -36,13 +36,21 @@ Key = tuple[str, str, str, str, str]  # check, book, chapter:verse, severity, me
 
 
 LINE_REF_RE = re.compile(r"line \d+$")
+# Counts over the whole text in a message: "(1368 of 1396)", "8 of 9 words", "(7441×)".
+COUNT_RE = re.compile(r"\d+ of \d+|\d+×")
+
+
+def stable_message(message: str) -> str:
+    return COUNT_RE.sub(lambda m: "# of #" if " of " in m.group() else "#×", message)
 
 
 def stable_key(key: Sequence[str]) -> Key:
-    """The key without a line number of a list file ("line 10002" of hyphenatedWords.txt): one added line moves all
-    lines below it, and every finding there would look fixed and new again (found 2026-11-24: +7675 -7676)."""
+    """The key without what changes when other places change (found 2026-11-24, the same problems looked fixed and
+    new again): the line number of a list file ("line 10002" of hyphenatedWords.txt: one added line moves all lines
+    below it; lists +7675 -7676) and counts over the whole text in the message ("usually written 'Бог' (1368 of
+    1396)": one fixed place changes the message of all others; name-case +241 -241)."""
     check, book, ref, severity, message = key
-    return check, book, "" if LINE_REF_RE.match(ref) else ref, severity, message
+    return check, book, "" if LINE_REF_RE.match(ref) else ref, severity, stable_message(message)
 
 
 def finding_key(finding: Finding) -> Key:
@@ -215,7 +223,8 @@ def accept(url: str) -> str:
     if value("clear") == "all":  # the button "Undo all Accept" of index.html
         clear_accepted(run.parent)
         return ""
-    keys ={key for key in data.findings if key[0] == check and key[3] == severity and key[4] == message}
+    message = stable_message(message)
+    keys = {key for key in data.findings if key[0] == check and key[3] == severity and key[4] == message}
     if not keys:
         return f"This problem is not in the report of {run.name}."
     with _Lock(run.parent):
