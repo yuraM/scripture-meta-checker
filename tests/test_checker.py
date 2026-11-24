@@ -1531,6 +1531,12 @@ class HistoryTest(unittest.TestCase):
         lists = RunData(["term-lists"], ["MAT"], False, [], [("term-lists", "ROM", "1:1", "warning", "t")])
         listed = compare(lists, RunData(["term-lists"], ["MRK"], False, [], []))["term-lists"]
         self.assertEqual((listed.fixed, listed.fixed_errors), (1, 0))  # a warning
+        # A line added to a list file moves the lines below it: the same entry is not new and fixed.
+        from checker.history import stable_key
+        moved = RunData(["lists"], None, False, [], [stable_key(("lists", "hyphenatedWords.txt", "line 11", "warning", "x"))])
+        before = RunData(["lists"], None, False, [], [stable_key(("lists", "hyphenatedWords.txt", "line 10", "warning", "x"))])
+        self.assertEqual((len(compare(before, moved)["lists"].new), compare(before, moved)["lists"].fixed), (0, 0))
+        self.assertEqual(stable_key(("lists", "Settings.xml", "line of x", "warning", "m"))[2], "line of x")
         warn = RunData(["spelling"], None, False, [], [("spelling", "MAT", "1:1", "warning", "w")])
         self.assertEqual(compare(warn, RunData(["spelling"], None, True, [], []))["spelling"].fixed, 0)
 

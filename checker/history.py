@@ -35,8 +35,18 @@ LOCK_WAIT_SECONDS = 5.0
 Key = tuple[str, str, str, str, str]  # check, book, chapter:verse, severity, message
 
 
+LINE_REF_RE = re.compile(r"line \d+$")
+
+
+def stable_key(key: Sequence[str]) -> Key:
+    """The key without a line number of a list file ("line 10002" of hyphenatedWords.txt): one added line moves all
+    lines below it, and every finding there would look fixed and new again (found 2026-11-24: +7675 -7676)."""
+    check, book, ref, severity, message = key
+    return check, book, "" if LINE_REF_RE.match(ref) else ref, severity, message
+
+
 def finding_key(finding: Finding) -> Key:
-    return finding.check, finding.book, finding.ref, finding.severity, finding.message
+    return stable_key((finding.check, finding.book, finding.ref, finding.severity, finding.message))
 
 
 @dataclass
@@ -74,7 +84,7 @@ def read_run_data(run: Path) -> RunData | None:
     try:
         content = json.loads((run / FINDINGS_FILE).read_text(encoding="utf-8"))
         return RunData(list(content["checks"]), content["books"], bool(content["errors_only"]),
-                       list(content.get("skipped", [])), [tuple(row) for row in content["findings"]])
+                       list(content.get("skipped", [])), [stable_key(row) for row in content["findings"]])
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
@@ -122,7 +132,7 @@ def accepted_path(report_dir: Path) -> Path:
 def read_accepted(report_dir: Path) -> set[Key]:
     try:
         content = json.loads(accepted_path(report_dir).read_text(encoding="utf-8"))
-        return {tuple(row) for row in content["accepted"] if len(row) == 5}
+        return {stable_key(row) for row in content["accepted"] if len(row) == 5}
     except (OSError, ValueError, KeyError, TypeError):
         return set()
 
