@@ -482,11 +482,12 @@ def write_report(findings: list[Finding], checks: Sequence[str], unique: bool, o
 def check_results(findings: Sequence[Finding], checks: Sequence[str],
                   skipped: dict[str, str], notes: dict[str, str] | None = None,
                   changes: dict[str, history.Change] | None = None,
-                  accepted: Counter[str] | None = None) -> list[CheckResult]:
+                  accepted: Counter[str] | None = None,
+                  accepted_errors: Counter[str] | None = None) -> list[CheckResult]:
     """Per check: counts and the grouped problems, for the HTML report and the window.
 
     `changes`: what is new since the last run per check (a check without an entry was not compared); `accepted`:
-    check -> number of accepted findings left out of `findings`.
+    check -> number of accepted findings left out of `findings` (`accepted_errors`: the errors among them).
     """
     changes = changes or {}
     results = []
@@ -501,7 +502,10 @@ def check_results(findings: Sequence[Finding], checks: Sequence[str],
         results.append(CheckResult(name, CHECK_DESCRIPTIONS.get(name, ""), errors, len(selected) - errors,
                                    skipped.get(name, ""), problems, (notes or {}).get(name, ""),
                                    len(change.new) if change else None, change.fixed if change else None,
-                                   (accepted or {}).get(name, 0)))
+                                   (accepted or {}).get(name, 0),
+                                   sum(key[3] == ERROR for key in change.new) if change else None,
+                                   change.fixed_errors if change else None,
+                                   (accepted_errors or {}).get(name, 0)))
     return results
 
 
@@ -558,7 +562,10 @@ def write_reports(project: Path, findings: list[Finding], checks: Sequence[str],
     previous_data = history.read_run_data(previous) if previous else None
     changes = history.compare(previous_data, data) if previous_data else {}
     history.write_run_data(report_dir, data)
-    findings, accepted = history.split_accepted(findings, history.read_accepted(report_dir.parent))
+    accepted_keys = history.read_accepted(report_dir.parent)
+    accepted_errors = Counter(f.check for f in findings
+                              if f.severity == ERROR and history.finding_key(f) in accepted_keys)
+    findings, accepted = history.split_accepted(findings, accepted_keys)
     notes = dict(notes or {})
     for name, count in accepted.items():
         hidden = (f"{count} places you accepted earlier are hidden "
@@ -570,7 +577,7 @@ def write_reports(project: Path, findings: list[Finding], checks: Sequence[str],
         selected = [f for f in findings if f.check == name]
         with (txt_dir / f"{name}.txt").open("w", encoding="utf-8") as out:
             write_report(selected, [name], unique, out, skipped, notes, changes)
-    results = check_results(findings, checks, skipped, notes, changes, accepted)
+    results = check_results(findings, checks, skipped, notes, changes, accepted, accepted_errors)
     # Links to Paratext name the project as Paratext windows do (Settings.xml <Name>), with its versification.
     settings_path = project / "Settings.xml"
     settings = load_settings(settings_path) if settings_path.is_file() else None

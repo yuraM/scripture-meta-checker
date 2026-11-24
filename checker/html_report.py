@@ -44,6 +44,9 @@ class CheckResult:
     new: int | None = None  # places new since the previous run; None = not compared
     fixed: int | None = None  # places of the previous run that are gone
     accepted: int = 0  # places accepted in an earlier report, left out
+    new_errors: int | None = None  # the errors among new, fixed and accepted (the rest are warnings)
+    fixed_errors: int | None = None
+    accepted_errors: int = 0
 
 
 STYLE = """

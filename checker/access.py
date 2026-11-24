@@ -4,8 +4,10 @@
 - At start the window asks the site for the role of the key (`user`, `beta`, `admin`) in the background.
   `beta`/`admin` see all checks and the role is kept for 30 days without an answer; then, or for an unknown key, the
   role is `user`: only the released checks are shown.
-- After each run of the window a record is sent: key, version, time, seconds and the numbers of errors and warnings
-  per check (checks marked "not checked" are left out). No project name, no text, no file names.
+- After each run of the window a record is sent: key, version, time, seconds, the project (Settings.xml Guid, Name
+  and FullName; user decision 2026-11-24) and per check (checks marked "not checked" are left out) the numbers of
+  errors and warnings, and, split into errors and warnings, how many are new and fixed since the previous run of the
+  report folder (only when there was one) and how many were accepted ("not a problem"). No text, no file names.
   Records that could not be sent wait in a queue file and go with the next record or the next start.
 
 The program never waits for the site: requests run in the background with a short timeout, and any error is
@@ -20,6 +22,7 @@ import threading
 import urllib.error
 import urllib.request
 import uuid
+import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -189,11 +192,42 @@ def refresh_role(version: str, folder: Path = DATA_FOLDER, post: Post = post_jso
 
 # --- run records -------------------------------------------------------------------------------------------------
 
-def run_record(results, version: str, seconds: float, moment: datetime | None = None) -> dict:
-    """The record of one run of the window. `results`: CheckResult of the run (name, errors, warnings, skipped)."""
-    checks = {r.name: {"errors": int(r.errors), "warnings": int(r.warnings)} for r in results if not r.skipped}
-    return {"id": str(uuid.uuid4()), "time": iso(moment or now_utc()), "version": version[:32],
-            "seconds": round(max(seconds, 0.0), 1), "checks": checks}
+def project_info(project: Path) -> dict | None:
+    """Guid, Name and FullName of the project from its Settings.xml (empty ones left out); None if unreadable."""
+    try:
+        root = ET.parse(project / "Settings.xml").getroot()
+    except (OSError, ET.ParseError):
+        return None
+    info = {}
+    for tag, field in (("Guid", "guid"), ("Name", "name"), ("FullName", "full_name")):
+        value = " ".join((root.findtext(tag) or "").split())
+        if value:
+            info[field] = value[:200]
+    return info if "guid" in info or "name" in info else None
+
+
+def check_numbers(result) -> dict:
+    """The numbers of one check for the site (API.md): new and fixed only when the run was compared."""
+    numbers = {"errors": int(result.errors), "warnings": int(result.warnings)}
+    if result.new is not None and result.fixed is not None:
+        new_errors = int(result.new_errors or 0)
+        fixed_errors = int(result.fixed_errors or 0)
+        numbers.update(new_errors=new_errors, new_warnings=int(result.new) - new_errors,
+                       fixed_errors=fixed_errors, fixed_warnings=int(result.fixed) - fixed_errors)
+    accepted_errors = int(result.accepted_errors or 0)
+    numbers.update(accepted_errors=accepted_errors, accepted_warnings=int(result.accepted or 0) - accepted_errors)
+    return numbers
+
+
+def run_record(results, version: str, seconds: float, moment: datetime | None = None,
+               project: dict | None = None) -> dict:
+    """The record of one run of the window. `results`: CheckResult of the run; `project`: from project_info."""
+    checks = {r.name: check_numbers(r) for r in results if not r.skipped}
+    record = {"id": str(uuid.uuid4()), "time": iso(moment or now_utc()), "version": version[:32],
+              "seconds": round(max(seconds, 0.0), 1), "checks": checks}
+    if project:
+        record["project"] = project
+    return record
 
 
 def _load_queue(folder: Path) -> dict:

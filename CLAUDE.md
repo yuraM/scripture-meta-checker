@@ -136,10 +136,12 @@ background (5 s timeout, any error = no answer); `beta`/`admin` see all checks a
 answer; `user` (also an unknown key, or no answer for 30 days) sees only `access.RELEASED_CHECKS` (the checks of v1.0.2,
 with `hyphenation-list` and `term-renderings` that were parts of `hyphenation` and `terms` then; for each next release
 the user says which checks are added). A new answer rebuilds the check list at once (ticks of checks that stay are
-kept). After each run of the window a record (uuid, time, version, seconds, errors/warnings per check; "not checked"
-left out) goes to `runs_queue.json` and the queue is sent in the background (also at start), 100 per request, per key;
-`200` = forgotten, `400` = kept but the same body is not sent again, no answer/`429`/`5xx` = kept. **No project name**
-is sent (user decision 2026-11-23).
+kept). After each run of the window a record (uuid, time, version, seconds, the project from Settings.xml: Guid, Name,
+FullName (user decision 2026-11-24; before, no project name was sent), and per check ("not checked" left out) errors,
+warnings and, split into errors and warnings, new/fixed since the previous run of the report folder (only when
+compared) and accepted places) goes to `runs_queue.json` and the queue is sent in the background (also at start),
+100 per request, per key; `200` = forgotten, `400` = kept but the same body is not sent again, no answer/`429`/`5xx` =
+kept.
 
 ## Repository layout
 

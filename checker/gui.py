@@ -273,13 +273,13 @@ class CheckerWindow:
         self._set_role(access.kept_role(self.key_state, access.now_utc()))  # user until the site answers
         self.check_role()
 
-    def _send_record(self, results, seconds: float) -> None:
+    def _send_record(self, results, seconds: float, project: Path) -> None:
         """Keep the record of the run and send the queue in the background (kept when there is no internet)."""
         key = self.key_state.get("key", "")
         if not key:
             return
         try:
-            access.add_record(key, access.run_record(results, VERSION, seconds))
+            access.add_record(key, access.run_record(results, VERSION, seconds, project=access.project_info(project)))
         except OSError:  # no rights to write the queue: the run itself is fine
             return
         threading.Thread(target=_quietly, args=(access.send_queue,), daemon=True).start()
@@ -406,7 +406,7 @@ class CheckerWindow:
             self.events.put(("progress", 1, 1, "writing the reports"))
             run = new_run_folder(report_dir)
             results = write_reports(project, findings, checks, run, True, skipped, notes, books)
-            self.events.put(("done", results, run / "index.html", time.monotonic() - started))
+            self.events.put(("done", results, run / "index.html", time.monotonic() - started, project))
         except Exception:  # shown to the user, the window stays open
             self.events.put(("error", traceback.format_exc()))
 
@@ -419,8 +419,8 @@ class CheckerWindow:
                     self.progress.configure(value=done, maximum=total)
                     self.status.set(f"Checking: {what}")
                 elif event[0] == "done":
-                    _, results, index, seconds = event
-                    self._send_record(results, seconds)
+                    _, results, index, seconds, project = event
+                    self._send_record(results, seconds, project)
                     errors = sum(r.errors for r in results)
                     warnings = sum(r.warnings for r in results)
                     compared = [r for r in results if r.new is not None]

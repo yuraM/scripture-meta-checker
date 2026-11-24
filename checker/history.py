@@ -51,9 +51,10 @@ class RunData:
 
 @dataclass
 class Change:
-    """New findings of one check since the previous run, and how many of its findings are gone."""
+    """New findings of one check since the previous run, and how many of its findings are gone (all, errors)."""
     new: set[Key] = field(default_factory=set)
     fixed: int = 0
+    fixed_errors: int = 0
 
 
 def run_sort_key(folder: Path) -> tuple[str, int]:
@@ -107,6 +108,8 @@ def compare(previous: RunData, current: RunData) -> dict[str, Change]:
         changes[key[0]].new.add(key)
     for key in before - now:
         changes[key[0]].fixed += 1
+        if key[3] == ERROR:
+            changes[key[0]].fixed_errors += 1
     return changes
 
 

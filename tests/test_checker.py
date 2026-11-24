@@ -1525,11 +1525,12 @@ class HistoryTest(unittest.TestCase):
         # pairs and usfm are not in both runs, quotes could not run in the old one; LUK was not checked now.
         self.assertEqual(set(changes), {"spelling"})
         self.assertEqual(changes["spelling"].new, {("spelling", "MAT", "1:5", "error", "a")})
-        self.assertEqual(changes["spelling"].fixed, 1)
+        self.assertEqual((changes["spelling"].fixed, changes["spelling"].fixed_errors), (1, 1))
         # A run with errors only: warnings of the other run are not compared.
         # A check of the whole project reads all books in both runs: its findings are compared in every book.
         lists = RunData(["term-lists"], ["MAT"], False, [], [("term-lists", "ROM", "1:1", "warning", "t")])
-        self.assertEqual(compare(lists, RunData(["term-lists"], ["MRK"], False, [], []))["term-lists"].fixed, 1)
+        listed = compare(lists, RunData(["term-lists"], ["MRK"], False, [], []))["term-lists"]
+        self.assertEqual((listed.fixed, listed.fixed_errors), (1, 0))  # a warning
         warn = RunData(["spelling"], None, False, [], [("spelling", "MAT", "1:1", "warning", "w")])
         self.assertEqual(compare(warn, RunData(["spelling"], None, True, [], []))["spelling"].fixed, 0)
 
@@ -1547,6 +1548,7 @@ class HistoryTest(unittest.TestCase):
             findings = [self.finding("1:1"), self.finding("1:3"), self.finding("2:1", "third", severity=WARNING)]
             results = write_reports(Path(folder) / "TST", findings, ["spelling"], run, True, {})
             self.assertEqual((results[0].new, results[0].fixed), (2, 1))
+            self.assertEqual((results[0].new_errors, results[0].fixed_errors), (1, 1))
             page = (run / "html" / "spelling.html").read_text(encoding="utf-8")
             data = json.loads(re.search(r'id="data">(.*?)</script>', page, re.S).group(1))
             self.assertEqual([(p["message"], p["count"], p["new"]) for p in data],
@@ -1570,6 +1572,7 @@ class HistoryTest(unittest.TestCase):
             third = new_run_folder(report_dir)
             results = write_reports(Path(folder) / "TST", findings, ["spelling"], third, True, {})
             self.assertEqual((results[0].errors, results[0].warnings, results[0].accepted), (0, 1, 2))
+            self.assertEqual(results[0].accepted_errors, 2)
             self.assertIn("2 places you accepted earlier are hidden", results[0].note)
             self.assertIn("+2 accepted</span>", (third / "index.html").read_text(encoding="utf-8"))
             self.assertIn('id="count-warning">1<', (third / "html" / "spelling.html").read_text(encoding="utf-8"))
@@ -1772,7 +1775,9 @@ class AccessTest(unittest.TestCase):
         from checker.html_report import CheckResult
         results = [CheckResult("spelling", "", 3, 120), CheckResult("terms", "", skipped="no list")]
         record = access.run_record(results, "1.0.2", 42.46, self.now)
-        self.assertEqual(record["checks"], {"spelling": {"errors": 3, "warnings": 120}})
+        self.assertEqual(record["checks"], {"spelling": {"errors": 3, "warnings": 120,
+                                                         "accepted_errors": 0, "accepted_warnings": 0}})
+        self.assertNotIn("project", record)
         self.assertEqual(record["time"], "2026-11-23T12:00:00Z")
         self.assertEqual(record["seconds"], 42.5)
         for _ in range(150):
@@ -1805,3 +1810,20 @@ class AccessTest(unittest.TestCase):
         self.assertEqual(access.send_queue(self.folder, ok, self.now), 51)
         self.assertEqual(sent, [51])
         self.assertEqual(access.queued(self.folder), 100)
+
+    def test_record_project_and_changes(self):
+        from checker import access
+        from checker.html_report import CheckResult
+        (self.folder / "Settings.xml").write_text(
+            "<ScriptureText><Name>amNASV24</Name><FullName> New  Amharic </FullName>"
+            "<Guid>64211ac8a2f1</Guid></ScriptureText>", encoding="utf-8")
+        project = access.project_info(self.folder)
+        self.assertEqual(project, {"guid": "64211ac8a2f1", "name": "amNASV24", "full_name": "New Amharic"})
+        self.assertIsNone(access.project_info(self.folder / "none"))
+        result = CheckResult("spelling", "", 3, 10, new=4, fixed=7, accepted=5, new_errors=1, fixed_errors=2,
+                             accepted_errors=3)
+        record = access.run_record([result], "1.0.3", 1, self.now, project)
+        self.assertEqual(record["project"]["name"], "amNASV24")
+        self.assertEqual(record["checks"]["spelling"], {
+            "errors": 3, "warnings": 10, "new_errors": 1, "new_warnings": 3, "fixed_errors": 2, "fixed_warnings": 5,
+            "accepted_errors": 3, "accepted_warnings": 2})
