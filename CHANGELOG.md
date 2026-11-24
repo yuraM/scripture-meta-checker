@@ -8,9 +8,11 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 - **A key is needed to open the window.** Get it at scripturechecker.org and type it when the program starts
   (the menu Key > Change key types another one). Testers (beta) and admins see all checks; other keys see the released
-  checks. After each run the program sends the site the project name (from Settings.xml) and, per check, the numbers
-  of errors and warnings: found, new, fixed since the last run, and accepted (no text); without internet it keeps
-  them and sends them later. The command line (main.py) needs no key.
+  checks. After each run the program sends the site the project name and language (from Settings.xml), the checked
+  books with their numbers of chapters and verses, and per check and per book the numbers of errors and warnings:
+  found, new, fixed since the last run, and accepted (no text); without internet it keeps them and sends them later.
+- **New and fixed are counted right** when a line is added to a list file or a count in a message changes ("usually
+  written 'Бог' (1368 of 1396)"): before, all places below or with that message looked fixed and new again. The command line (main.py) needs no key.
 - **repeated-text moved to Unit 4** (Words), into the group Repeated words next to repeated-words: both find
   words written twice. It now also looks in footnotes and headings, and finds words written twice with a comma or a
   colon between them ('\fq the curtain\ft : the curtain …'); before, only spaces counted. All places of a verse are

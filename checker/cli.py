@@ -254,6 +254,56 @@ def project_books(project: Path) -> list[tuple[str, str]]:
     return sorted(books.items(), key=lambda item: (book_order(item[0]), item[0]))
 
 
+def book_sizes(project: Path, books: Sequence[str] | None = None) -> dict[str, tuple[int, int]]:
+    """Book code -> (chapters, verses) of the book files of a project (all, or only `books`), in book order.
+    Counts the \\c and \\v markers (a verse range "\\v 1-2" is one)."""
+    settings = load_settings(project / "Settings.xml")
+    wanted = {code.upper() for code in books} if books else None
+    sizes: dict[str, tuple[int, int]] = {}
+    for path in project.glob(f"{settings.file_name_pre_part}*{settings.file_name_post_part}"):
+        with path.open(encoding="utf-8-sig", errors="replace") as file:
+            content = file.read()
+        code = book_code(content, path)
+        if (wanted is None or code in wanted) and code not in sizes:
+            sizes[code] = (len(re.findall(r"\\c\s+\d", content)), len(re.findall(r"\\v\s+\d", content)))
+    return dict(sorted(sizes.items(), key=lambda item: (book_order(item[0]), item[0])))
+
+
+def book_numbers(findings: Sequence[Finding], accepted: set, changes: dict[str, history.Change],
+                 checks: Sequence[str], skipped: dict[str, str]) -> dict[str, dict[str, list[int | None]]]:
+    """Check -> book -> [errors, warnings, accepted errors, accepted warnings, new errors, new warnings, fixed errors,
+    fixed warnings] for the checks of single books; `findings` with the accepted ones. New/fixed are None for a
+    book the previous run did not check (or when the check was not compared). Books without numbers are left out."""
+    result: dict[str, dict[str, list[int | None]]] = {}
+    for name in checks:
+        if whole_project(name) or name in skipped:
+            continue
+        change = changes.get(name)
+        rows: dict[str, list[int | None]] = {}
+
+        def row(book: str) -> list[int | None]:
+            if book not in rows:
+                compared = change is not None and (change.books is None or book in change.books)
+                rows[book] = [0, 0, 0, 0] + ([0, 0, 0, 0] if compared else [None] * 4)
+            return rows[book]
+        for finding in findings:
+            if finding.check == name:
+                is_error = finding.severity == ERROR
+                index = (2 if history.finding_key(finding) in accepted else 0) + (0 if is_error else 1)
+                row(finding.book)[index] += 1
+        if change:
+            for key in change.new:
+                values = row(key[1])
+                if values[4] is not None:
+                    values[4 if key[3] == ERROR else 5] += 1
+            for key in change.gone:
+                values = row(key[1])
+                if values[6] is not None:
+                    values[6 if key[3] == ERROR else 7] += 1
+        result[name] = rows
+    return result
+
+
 def missing_sources(ctx: CheckContext) -> dict[str, str]:
     """Checks that have nothing to check with: a file of the project is missing or empty, or the list in Paratext is
     empty. They are not run; the reports show "!" with the reason instead of 0 problems."""
@@ -563,6 +613,7 @@ def write_reports(project: Path, findings: list[Finding], checks: Sequence[str],
     changes = history.compare(previous_data, data) if previous_data else {}
     history.write_run_data(report_dir, data)
     accepted_keys = history.read_accepted(report_dir.parent)
+    per_book = book_numbers(findings, accepted_keys, changes, checks, skipped)
     accepted_errors = Counter(f.check for f in findings
                               if f.severity == ERROR and history.finding_key(f) in accepted_keys)
     findings, accepted = history.split_accepted(findings, accepted_keys)
@@ -578,6 +629,9 @@ def write_reports(project: Path, findings: list[Finding], checks: Sequence[str],
         with (txt_dir / f"{name}.txt").open("w", encoding="utf-8") as out:
             write_report(selected, [name], unique, out, skipped, notes, changes)
     results = check_results(findings, checks, skipped, notes, changes, accepted, accepted_errors)
+    for result in results:
+        if result.name in per_book:
+            result.per_book, result.books = True, per_book[result.name]
     # Links to Paratext name the project as Paratext windows do (Settings.xml <Name>), with its versification.
     settings_path = project / "Settings.xml"
     settings = load_settings(settings_path) if settings_path.is_file() else None

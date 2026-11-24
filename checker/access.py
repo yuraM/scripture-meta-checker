@@ -4,10 +4,12 @@
 - At start the window asks the site for the role of the key (`user`, `beta`, `admin`) in the background.
   `beta`/`admin` see all checks and the role is kept for 30 days without an answer; then, or for an unknown key, the
   role is `user`: only the released checks are shown.
-- After each run of the window a record is sent: key, version, time, seconds, the project (Settings.xml Guid, Name
-  and FullName; user decision 2026-11-24) and per check (checks marked "not checked" are left out) the numbers of
+- After each run of the window a record is sent: key, version, time, seconds, the project (Settings.xml Guid, Name,
+  FullName, Language, LanguageIsoCode; user decision 2026-11-24), the checked books with their numbers of chapters
+  and verses and their problem numbers, and per check (checks marked "not checked" are left out) the numbers of
   errors and warnings, and, split into errors and warnings, how many are new and fixed since the previous run of the
-  report folder (only when there was one) and how many were accepted ("not a problem"). No text, no file names.
+  report folder (only when there was one) and how many were accepted ("not a problem"); checks of single books also
+  per book. No text, no file names.
   Records that could not be sent wait in a queue file and go with the next record or the next start.
 
 The program never waits for the site: requests run in the background with a short timeout, and any error is
@@ -36,6 +38,7 @@ ROLES = ("user", "beta", "admin")
 FULL_ROLES = ("beta", "admin")  # see all checks
 KEEP_ROLE = timedelta(days=30)  # beta/admin without an answer from the site
 MAX_RUNS_PER_REQUEST = 100  # API.md
+MAX_BODY_BYTES = 1_000_000  # with books one record can be large: fewer per request
 MAX_QUEUED = 2000  # older records are dropped: the queue file stays small
 MAX_AGE = timedelta(days=2 * 365)  # the site does not save older records
 DATA_FOLDER = Path(os.environ.get("APPDATA") or Path.home()) / "Scripture checker"
@@ -199,7 +202,8 @@ def project_info(project: Path) -> dict | None:
     except (OSError, ET.ParseError):
         return None
     info = {}
-    for tag, field in (("Guid", "guid"), ("Name", "name"), ("FullName", "full_name")):
+    for tag, field in (("Guid", "guid"), ("Name", "name"), ("FullName", "full_name"), ("Language", "language"),
+                       ("LanguageIsoCode", "language_code")):
         value = " ".join((root.findtext(tag) or "").split())
         if value:
             info[field] = value[:200]
@@ -216,17 +220,47 @@ def check_numbers(result) -> dict:
                        fixed_errors=fixed_errors, fixed_warnings=int(result.fixed) - fixed_errors)
     accepted_errors = int(result.accepted_errors or 0)
     numbers.update(accepted_errors=accepted_errors, accepted_warnings=int(result.accepted or 0) - accepted_errors)
+    if getattr(result, "per_book", False):
+        # book -> [errors, warnings, accepted errors, accepted warnings]; books with no problems are left out
+        numbers["books"] = {book: [int(v) for v in values[:4]] for book, values in result.books.items()
+                            if any(values[:4])}
     return numbers
 
 
+BOOK_FIELDS = ("errors", "warnings", "accepted_errors", "accepted_warnings",
+               "new_errors", "new_warnings", "fixed_errors", "fixed_warnings")
+
+
+def book_totals(results, sizes: dict[str, tuple[int, int]]) -> dict:
+    """Checked book -> chapters, verses and the problem numbers of all checks of single books. New and fixed only
+    when at least one check compared this book with the previous run."""
+    books = {}
+    for book, (chapters, verses) in sizes.items():
+        sums: list[int | None] = [0, 0, 0, 0, None, None, None, None]
+        for result in results:
+            values = result.books.get(book) if getattr(result, "per_book", False) and not result.skipped else None
+            if not values:
+                continue
+            for i, value in enumerate(values):
+                if value is not None:
+                    sums[i] = (sums[i] or 0) + int(value)
+        entry = {"chapters": int(chapters), "verses": int(verses)}
+        entry.update({name: value for name, value in zip(BOOK_FIELDS, sums) if value is not None})
+        books[book] = entry
+    return books
+
+
 def run_record(results, version: str, seconds: float, moment: datetime | None = None,
-               project: dict | None = None) -> dict:
-    """The record of one run of the window. `results`: CheckResult of the run; `project`: from project_info."""
+               project: dict | None = None, sizes: dict[str, tuple[int, int]] | None = None) -> dict:
+    """The record of one run of the window. `results`: CheckResult of the run; `project`: from project_info;
+    `sizes`: the checked books (cli.book_sizes)."""
     checks = {r.name: check_numbers(r) for r in results if not r.skipped}
     record = {"id": str(uuid.uuid4()), "time": iso(moment or now_utc()), "version": version[:32],
               "seconds": round(max(seconds, 0.0), 1), "checks": checks}
     if project:
         record["project"] = project
+    if sizes:
+        record["books"] = book_totals(results, sizes)
     return record
 
 
@@ -249,6 +283,20 @@ def _body_hash(body: dict) -> str:
     return hashlib.sha256(json.dumps(body, sort_keys=True).encode("utf-8")).hexdigest()
 
 
+def _parts(items: list[dict]) -> list[list[dict]]:
+    """Records in parts of at most 100 and about MAX_BODY_BYTES (a larger record goes alone)."""
+    parts: list[list[dict]] = []
+    size = 0
+    for item in items:
+        item_size = len(json.dumps(item["run"], separators=(",", ":")))
+        if not parts or len(parts[-1]) >= MAX_RUNS_PER_REQUEST or size + item_size > MAX_BODY_BYTES:
+            parts.append([])
+            size = 0
+        parts[-1].append(item)
+        size += item_size
+    return parts
+
+
 def send_queue(folder: Path = DATA_FOLDER, post: Post = post_json, moment: datetime | None = None) -> int:
     """Send the kept records, up to 100 per request and grouped by key. Returns how many the site took.
 
@@ -267,8 +315,7 @@ def send_queue(folder: Path = DATA_FOLDER, post: Post = post_json, moment: datet
         taken = 0
         for key in dict.fromkeys(item["key"] for item in runs):
             mine = [item for item in runs if item["key"] == key]
-            for start in range(0, len(mine), MAX_RUNS_PER_REQUEST):
-                part = mine[start:start + MAX_RUNS_PER_REQUEST]
+            for part in _parts(mine):
                 body = {"key": key, "runs": [item["run"] for item in part]}
                 digest = _body_hash(body)
                 seen.add(digest)

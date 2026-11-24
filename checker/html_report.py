@@ -47,6 +47,10 @@ class CheckResult:
     new_errors: int | None = None  # the errors among new, fixed and accepted (the rest are warnings)
     fixed_errors: int | None = None
     accepted_errors: int = 0
+    # Per book (checks of single books, not of the whole project): book -> [errors, warnings, accepted errors,
+    # accepted warnings, new errors, new warnings, fixed errors, fixed warnings]; new/fixed None = not compared.
+    per_book: bool = False
+    books: dict[str, list[int | None]] = field(default_factory=dict)
 
 
 STYLE = """

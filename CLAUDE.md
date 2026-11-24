@@ -137,11 +137,15 @@ answer; `user` (also an unknown key, or no answer for 30 days) sees only `access
 with `hyphenation-list` and `term-renderings` that were parts of `hyphenation` and `terms` then; for each next release
 the user says which checks are added). A new answer rebuilds the check list at once (ticks of checks that stay are
 kept). After each run of the window a record (uuid, time, version, seconds, the project from Settings.xml: Guid, Name,
-FullName (user decision 2026-11-24; before, no project name was sent), and per check ("not checked" left out) errors,
-warnings and, split into errors and warnings, new/fixed since the previous run of the report folder (only when
-compared) and accepted places) goes to `runs_queue.json` and the queue is sent in the background (also at start),
-100 per request, per key; `200` = forgotten, `400` = kept but the same body is not sent again, no answer/`429`/`5xx` =
-kept.
+FullName, Language, LanguageIsoCode (user decision 2026-11-24; before, no project name was sent), the checked books
+with chapters/verses (`cli.book_sizes`) and their sums, and per check ("not checked" left out) errors, warnings and,
+split into errors and warnings, new/fixed since the previous run of the report folder (only when compared) and
+accepted places; checks of single books also per book (`cli.book_numbers`, `CheckResult.books`)) goes to
+`runs_queue.json` and the queue is sent in the background (also at start), at most 100 records and about 1 MB per
+request, per key; `200` = forgotten, `400` = kept but the same body is not sent again, no answer/`429`/`5xx` = kept.
+**Comparison key** (`history.stable_key`): check, book, place, severity, message, but without the line number of a
+list file ("line 10002") and without whole-text counts in the message ("(1368 of 1396)", "(7441×)"): they change
+when other places change (found 2026-11-24: lists +7675 -7676, name-case +241 -241 with one real change).
 
 ## Repository layout
 

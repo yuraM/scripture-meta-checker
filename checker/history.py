@@ -69,10 +69,14 @@ class RunData:
 
 @dataclass
 class Change:
-    """New findings of one check since the previous run, and how many of its findings are gone (all, errors)."""
+    """New findings of one check since the previous run, and how many of its findings are gone (all, errors).
+
+    `gone`: the findings that are gone; `books`: the books both runs checked for this check (None = all)."""
     new: set[Key] = field(default_factory=set)
     fixed: int = 0
     fixed_errors: int = 0
+    gone: set[Key] = field(default_factory=set)
+    books: frozenset[str] | None = None
 
 
 def run_sort_key(folder: Path) -> tuple[str, int]:
@@ -121,10 +125,12 @@ def compare(previous: RunData, current: RunData) -> dict[str, Change]:
                 and (not errors_only or key[3] == ERROR)}
 
     before, now = selected(previous.findings), selected(current.findings)
-    changes = {name: Change() for name in checks}
+    changes = {name: Change(books=None if books is None or whole_project(name) else frozenset(books))
+               for name in checks}
     for key in now - before:
         changes[key[0]].new.add(key)
     for key in before - now:
+        changes[key[0]].gone.add(key)
         changes[key[0]].fixed += 1
         if key[3] == ERROR:
             changes[key[0]].fixed_errors += 1

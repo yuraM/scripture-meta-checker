@@ -19,7 +19,7 @@ from tkinter import BooleanVar, Button, Frame, Label, Menu, StringVar, Tk, filed
 from checker import access, history
 from checker.books import DEUTEROCANON, EXTRA_MATERIAL, NEW_TESTAMENT, OLD_TESTAMENT
 from checker.cli import (
-    CHECK_DESCRIPTIONS, latest_run, new_run_folder, project_books, run_checks, write_reports,
+    CHECK_DESCRIPTIONS, book_sizes, latest_run, new_run_folder, project_books, run_checks, write_reports,
 )
 from checker.html_report import TXT_FOLDER
 from checker.paratext_link import register as register_links
@@ -273,13 +273,13 @@ class CheckerWindow:
         self._set_role(access.kept_role(self.key_state, access.now_utc()))  # user until the site answers
         self.check_role()
 
-    def _send_record(self, results, seconds: float, project: Path) -> None:
+    def _send_record(self, results, seconds: float, project: dict | None, sizes: dict) -> None:
         """Keep the record of the run and send the queue in the background (kept when there is no internet)."""
         key = self.key_state.get("key", "")
         if not key:
             return
         try:
-            access.add_record(key, access.run_record(results, VERSION, seconds, project=access.project_info(project)))
+            access.add_record(key, access.run_record(results, VERSION, seconds, project=project, sizes=sizes))
         except OSError:  # no rights to write the queue: the run itself is fine
             return
         threading.Thread(target=_quietly, args=(access.send_queue,), daemon=True).start()
@@ -406,7 +406,12 @@ class CheckerWindow:
             self.events.put(("progress", 1, 1, "writing the reports"))
             run = new_run_folder(report_dir)
             results = write_reports(project, findings, checks, run, True, skipped, notes, books)
-            self.events.put(("done", results, run / "index.html", time.monotonic() - started, project))
+            seconds = time.monotonic() - started
+            try:  # for the statistics of the site only: a problem here never stops the run
+                info, sizes = access.project_info(project), book_sizes(project, books)
+            except Exception:
+                info, sizes = None, {}
+            self.events.put(("done", results, run / "index.html", seconds, info, sizes))
         except Exception:  # shown to the user, the window stays open
             self.events.put(("error", traceback.format_exc()))
 
@@ -419,8 +424,8 @@ class CheckerWindow:
                     self.progress.configure(value=done, maximum=total)
                     self.status.set(f"Checking: {what}")
                 elif event[0] == "done":
-                    _, results, index, seconds, project = event
-                    self._send_record(results, seconds, project)
+                    _, results, index, seconds, project, sizes = event
+                    self._send_record(results, seconds, project, sizes)
                     errors = sum(r.errors for r in results)
                     warnings = sum(r.warnings for r in results)
                     compared = [r for r in results if r.new is not None]

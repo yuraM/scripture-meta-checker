@@ -1838,3 +1838,49 @@ class AccessTest(unittest.TestCase):
         self.assertEqual(record["checks"]["spelling"], {
             "errors": 3, "warnings": 10, "new_errors": 1, "new_warnings": 3, "fixed_errors": 2, "fixed_warnings": 5,
             "accepted_errors": 3, "accepted_warnings": 2})
+
+    def test_record_books(self):
+        from checker import access
+        from checker.cli import book_numbers, book_sizes
+        from checker.history import Change, finding_key
+        from checker.html_report import CheckResult
+        from checker.model import Finding
+        project = self.folder / "TST"
+        project.mkdir()
+        (project / "Settings.xml").write_text(
+            "<ScriptureText><Name>TST</Name><Naming PrePart=\"\" PostPart=\"TST.SFM\" BookNameForm=\"41MAT\"/>"
+            "</ScriptureText>", encoding="utf-8")
+        (project / "41MATTST.SFM").write_text("\\id MAT\n\\c 1\n\\v 1 a\n\\v 2-3 b\n\\c 2\n\\v 1 c\n", encoding="utf-8")
+        (project / "42MRKTST.SFM").write_text("\\id MRK\n\\c 1\n\\v 1 a\n", encoding="utf-8")
+        self.assertEqual(book_sizes(project), {"MAT": (2, 3), "MRK": (1, 1)})
+        self.assertEqual(book_sizes(project, ["mrk"]), {"MRK": (1, 1)})
+
+        def finding(book, severity="error", message="m"):
+            return Finding(book, "1:1", severity, "spelling", "x", message, "")
+        accepted = {finding_key(finding("MAT", "warning", "ok"))}
+        findings = [finding("MAT"), finding("MAT", "warning", "ok"), finding("MRK", "warning")]
+        gone = finding_key(finding("MAT", "warning", "old"))
+        change = Change(new={finding_key(finding("MAT"))}, fixed=1, gone={gone}, books=frozenset({"MAT"}))
+        numbers = book_numbers(findings, accepted, {"spelling": change}, ["spelling", "lists", "quotes"],
+                               {"quotes": "not checked"})
+        # lists is a check of the whole project, quotes was not checked; MRK was not in the previous run.
+        self.assertEqual(numbers, {"spelling": {"MAT": [1, 0, 0, 1, 1, 0, 0, 1], "MRK": [0, 1, 0, 0, None, None, None, None]}})
+
+        result = CheckResult("spelling", "", 1, 1, new=1, fixed=1, accepted=1, new_errors=1, fixed_errors=0,
+                             per_book=True, books=numbers["spelling"])
+        record = access.run_record([result, CheckResult("lists", "", 0, 2)], "1.0.3", 1, self.now,
+                                   sizes=book_sizes(project))
+        self.assertEqual(record["checks"]["spelling"]["books"], {"MAT": [1, 0, 0, 1], "MRK": [0, 1, 0, 0]})
+        self.assertNotIn("books", record["checks"]["lists"])
+        self.assertEqual(record["books"]["MAT"], {"chapters": 2, "verses": 3, "errors": 1, "warnings": 0,
+                                                  "accepted_errors": 0, "accepted_warnings": 1, "new_errors": 1,
+                                                  "new_warnings": 0, "fixed_errors": 0, "fixed_warnings": 1})
+        self.assertEqual(record["books"]["MRK"], {"chapters": 1, "verses": 1, "errors": 0, "warnings": 1,
+                                                  "accepted_errors": 0, "accepted_warnings": 0})
+
+    def test_queue_parts_by_size(self):
+        from checker import access
+        small = {"run": {"id": "a"}}
+        big = {"run": {"id": "b", "pad": "x" * access.MAX_BODY_BYTES}}  # larger than a body: alone
+        parts = access._parts([small, small, big, small] + [small] * 150)
+        self.assertEqual([len(part) for part in parts], [2, 1, 100, 51])
