@@ -130,12 +130,19 @@ def rule_violations(
                 yield f"part '{segment}' has no vowel"
     if len(letters[0]) == 1 or len(letters[-1]) == 1:
         yield "one letter stays alone at the end or start of a line"
-    for previous, plain in zip(letters, letters[1:]):
+    for index, (previous, plain) in enumerate(zip(letters, letters[1:])):
         first = plain[:1]
         if first in medial_punctuation or first in profile.no_break_before:
             yield f"a line must not break before '{first}'"
-        elif first in profile.glides and previous[-1:] in vowels and plain[1:2] not in vowels:
+        elif first in profile.glides and previous[-1:] in vowels and plain[1:2] not in vowels \
+                and not _glide_starts_root("".join(letters[:index + 1]), plain, profile):
             yield f"'{first}' must stay with the vowel before it"
+
+
+def _glide_starts_root(before: str, after: str, profile: LanguageProfile) -> bool:
+    """A break between a prefix and a root that starts with the glide ("ви=йти", "при=йми"): the root keeps its
+    first letter (Ukrainian spelling rules 2019, § 63, point 5), so the glide rule does not apply."""
+    return before.lower() in profile.glide_prefixes and after.lower().startswith(profile.glide_roots)
 
 
 def is_unhyphenated(entry: HyphenatedWord, profile: LanguageProfile, hard_hyphen: str = "-") -> bool:

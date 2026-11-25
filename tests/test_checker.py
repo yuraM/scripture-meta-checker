@@ -1054,8 +1054,14 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
                          ["word is written twice: 'і і' (marked wrong in Repeated words inventory)"])
 
     def test_lists(self):
-        findings = list(check_lists(UsageCounter(), self.ctx))
-        self.assertIn("'Дивіться' is W but 'дивіться' is R", {f.message for f in findings})
+        # "Дивіться" W next to "дивіться" R: the Wordlist window does not show it, so `unused` lists it, not `lists`.
+        usage = UsageCounter()
+        usage.words["Дивіться"] += 1
+        self.assertFalse([f for f in check_lists(usage, self.ctx) if f.item == "Дивіться"])
+        hidden = [f for f in check_unused(usage, self.ctx) if f.item == "Дивіться"]
+        self.assertEqual([(f.book, f.ref, f.message) for f in hidden],
+                         [("Wordlist", "(wrong, W)", "'Дивіться' is in the list, but the Wordlist window does not "
+                                                     "show it; the list also has 'дивіться' (right, R)")])
 
     def test_lists_hyphenated_wrong_word(self):
         # "-" is in every hyphenation list: not a word, even when the Wordlist marks it wrong.
@@ -1063,7 +1069,10 @@ class ChecksTest(TempProjectMixin, unittest.TestCase):
         path = self.root / "hyphenatedWords.txt"
         path.write_text('HardHyphen = "-"\nSoftHyphen = "="\n*-\n*по=мил=ка\n*сло=во\n', encoding="utf-8")
         self.ctx.hyphenation = load_hyphenation(path)
-        findings = [f for f in check_lists(UsageCounter(), self.ctx) if "is hyphenated" in f.message]
+        usage = UsageCounter()
+        self.assertFalse([f for f in check_lists(usage, self.ctx) if "is hyphenated" in f.message])  # not in the text
+        usage.words.update(["-", "Помилка"])
+        findings = [f for f in check_lists(usage, self.ctx) if "is hyphenated" in f.message]
         self.assertEqual([f.item for f in findings], ["по=мил=ка"])
 
     def _parallel_usage(self) -> UsageCounter:
@@ -1231,6 +1240,10 @@ SoftHyphen = "="
 *ac=cu=racy
 *а́=дам
 *вiд=ведіть
+*ви=йдуть
+*при=йми
+*ви=ко=на=йте
+*сла=йди
 нові=слово
 """
 
@@ -1251,7 +1264,7 @@ class HyphenationTest(TempProjectMixin, unittest.TestCase):
 
     def test_rules_with_language_profile(self):
         problems = self.problems(PROFILES["uk"])
-        self.assertEqual(problems["ввійти"], ["'й' must stay with the vowel before it"])
+        self.assertEqual(problems["ввійти"], [])  # prefix + root "йти": § 63, point 5
         self.assertEqual(problems["ключи"], ["part 'кл' has no vowel"])
         self.assertEqual(problems["амінь"], ["one letter stays alone at the end or start of a line"])
         self.assertEqual(problems["двадцятьох"], ["a line must not break before 'ь'"])
@@ -1260,6 +1273,10 @@ class HyphenationTest(TempProjectMixin, unittest.TestCase):
         self.assertEqual(problems["accuracy"], [])  # other script: vowel rules are skipped
         self.assertEqual(problems["а́дам"], ["one letter stays alone at the end or start of a line"])  # stress mark ignored
         self.assertEqual(problems["вiдведіть"], ["has letters from different alphabets: CYRILLIC + LATIN (letters that look the same?)"])
+        # "й" may start a root after a prefix ("ви=йдуть"), not an ending or the middle of a root.
+        self.assertEqual((problems["вийдуть"], problems["прийми"]), ([], []))
+        self.assertEqual(problems["виконайте"], ["'й' must stay with the vowel before it"])
+        self.assertEqual(problems["слайди"], ["'й' must stay with the vowel before it"])
 
     def test_generic_rules_only_without_profile(self):
         problems = self.problems(GENERIC)
@@ -1287,7 +1304,7 @@ class HyphenationTest(TempProjectMixin, unittest.TestCase):
     def test_check_reports_missing_and_unused(self):
         ctx = CheckContext(self.settings, self.spelling, self.hyphenation)
         usage = UsageCounter()
-        for segment in parse_usfm("\\p Слово розповідати інше", "TST"):
+        for segment in parse_usfm("\\c 1 \\p \\v 1 Слово розповідати інше амінь", "TST"):
             usage.add(ctx.analyse(segment))
         findings = list(check_hyphenation(usage, ctx))
         self.assertIn(("missing", "інше"), {(f.ref, f.item) for f in findings})
@@ -1297,9 +1314,13 @@ class HyphenationTest(TempProjectMixin, unittest.TestCase):
         rules = list(check_hyphenation_list(usage, ctx))
         self.assertTrue(rules and {f.check for f in rules} == {"hyphenation-list"})
         self.assertFalse({f.ref for f in rules} & {"missing"})
-        unused = {f.item for f in check_unused(usage, ctx) if f.book == "hyphenatedWords.txt"}
-        self.assertIn("бачитимуть", unused)
-        self.assertNotIn("слово", unused)
+        # Only words of the text, with the place where Paratext shows them; the others are in `unused`.
+        self.assertEqual({f.item.replace("=", "").lower() for f in rules} - {"unreviewed"}, {"амінь"})
+        self.assertIn("(in the text: TST 1:1, 1×)", rules[0].message)
+        unused = {f.message for f in check_unused(usage, ctx) if f.book == "hyphenatedWords.txt"}
+        self.assertTrue([m for m in unused if m.startswith("'вiд=") and "is in hyphenatedWords.txt, but the word is "
+                         "not in any book of the project (also: has letters from different alphabets" in m])
+        self.assertFalse([m for m in unused if m.startswith("'сло=во'")])
 
 
 class ReportTest(unittest.TestCase):

@@ -33,7 +33,7 @@ from checker.parallels import check_parallel_changes, check_parallel_differences
 from checker.quotes import check_quotes, is_isolated
 from checker.references import ReferencePart, parse_reference
 from checker.settings import ReferenceFormat
-from checker.spelling import STATE_RIGHT, STATE_WRONG
+from checker.spelling import STATE_RIGHT, STATE_WRONG, SpellingEntry
 from checker.books import book_from_file_name
 from checker.spaces import check_special_spaces
 from checker.terms import check_term_lists, check_term_renderings, check_terms
@@ -685,6 +685,27 @@ def _unused(source: str, list_name: str, entries: Iterable[str], counts: Counter
 
 
 _STATE_NAMES = {STATE_RIGHT: "(right, R)", STATE_WRONG: "(wrong, W)"}
+_STATE_WORDS = {STATE_RIGHT: "marked right (R)", STATE_WRONG: "marked wrong (W)"}
+NOT_IN_PROJECT = "but the word is not in any book of the project"
+
+
+def _also(problems: list[str]) -> str:
+    return f" (also: {'; '.join(problems)})" if problems else ""
+
+
+def _text_words(usage: UsageCounter) -> Counter[str]:
+    """Words of the text in small letters, with their counts."""
+    counts: Counter[str] = Counter()
+    for word, count in usage.words.items():
+        counts[word.lower()] += count
+    return counts
+
+
+def _in_text(word: str, usage: UsageCounter, text_words: Counter[str]) -> str:
+    """' (in the text: XXA 1:5, 3×)': where to find a word of a list in Paratext (user wish 2026-11-25)."""
+    book, ref = usage.first_seen.get(word.lower(), ("", ""))
+    place = f"{book} {ref}".strip()
+    return f" (in the text: {place}, {text_words[word.lower()]}×)" if place else ""
 
 
 def check_unused(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
@@ -702,16 +723,44 @@ def check_unused(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
         entry = ctx.spelling.lookup(word)
         if entry:
             spelling_counts[entry.word] += count
-    for state in sorted({entry.state for entry in ctx.spelling.entries.values()}):
-        entries = [key for key, entry in ctx.spelling.entries.items() if entry.state == state]
-        yield from _unused(places.WORDLIST, _STATE_NAMES.get(state, f"(state {state})"), entries, spelling_counts)
+    # A capitalized entry next to a small-letter entry of another state ("Дивіться" W, "дивіться" R): the Wordlist
+    # window shows one line per word in small letters, so the capitalized entry is never shown (user decision
+    # 2026-11-25: listed here, not in `lists`, because people do not edit the file).
+    hidden = {key: lowercase for key, entry in ctx.spelling.entries.items()
+              if key != key.lower() and (lowercase := ctx.spelling.entries.get(key.lower()))
+              and lowercase.state != entry.state}
+    for key, lowercase in sorted(hidden.items()):
+        entry = ctx.spelling.entries[key]
+        yield Finding(book=places.WORDLIST, ref=_STATE_NAMES.get(entry.state, f"(state {entry.state})"),
+                      severity=WARNING, check="unused", item=key,
+                      message=f"'{key}' is in the list, but the {places.WORDLIST} window does not show it; the "
+                              f"list also has '{lowercase.word}' {_STATE_NAMES.get(lowercase.state, '')}",
+                      context="")
+    # Wordlist and hyphenatedWords.txt entries of words that are in no book: the Wordlist window does not show them,
+    # so the problems that `lists`, `hyphenation-list` and `approvals` leave out are named here (user decision
+    # 2026-11-25).
+    for key, entry in sorted(ctx.spelling.entries.items()):
+        if key not in hidden and not spelling_counts[key]:
+            problems = [message for _, message in _wordlist_problems(key, entry, ctx)]
+            yield Finding(book=places.WORDLIST, ref=_STATE_NAMES.get(entry.state, f"(state {entry.state})"),
+                          severity=WARNING, check="unused", item=key,
+                          message=f"'{key}' is {_STATE_WORDS.get(entry.state, f'in state {entry.state}')} in "
+                                  f"{places.WORDLIST}, {NOT_IN_PROJECT}{_also(problems)}", context="")
 
     if ctx.hyphenation:
-        lowercase_counts = Counter()
-        for word, count in usage.words.items():
-            lowercase_counts[word.lower()] += count
-        yield from _unused(HYPHENATION_FILE, "words", (e.word.lower() for e in ctx.hyphenation.words),
-                           lowercase_counts)
+        text_words = _text_words(usage)
+        no_break_before = ctx.settings.word_medial_punctuation - {ctx.hyphenation.hard_hyphen}
+        for entry in ctx.hyphenation.words:
+            if entry.word.lower() in text_words:
+                continue
+            problems = list(rule_violations(entry, ctx.language, no_break_before))
+            spelling = ctx.spelling.lookup(entry.word)
+            if spelling and spelling.state == STATE_WRONG and any(ch.isalpha() for ch in entry.word):
+                problems.append(f"'{spelling.word}' is marked wrong (W) in {places.WORDLIST}")
+            if not entry.locked:
+                problems.append("not checked by a person (no '*' at the start)")
+            yield _list_finding(f"line {entry.line}", WARNING, "unused", entry.text,
+                                f"'{entry.text}' is in {HYPHENATION_FILE}, {NOT_IN_PROJECT}{_also(problems)}")
 
 
 def _list_finding(ref: str, severity: str, check: str, item: str, message: str) -> Finding:
@@ -724,31 +773,38 @@ def check_hyphenation_list(usage: UsageCounter, ctx: CheckContext) -> Iterator[F
     if not ctx.hyphenation:
         return
     hyphenation = ctx.hyphenation
-    entries = hyphenation.words
+    # Only entries of words of the text: the Wordlist window shows only those; `unused` names the problems of the
+    # others (user decision 2026-11-25). The consistency groups still use all entries.
+    text_words = _text_words(usage)
+    in_text = [entry for entry in hyphenation.words if entry.word.lower() in text_words]
     no_break_before = ctx.settings.word_medial_punctuation - {hyphenation.hard_hyphen}
-    for entry in entries:
+    for entry in in_text:
         for problem in rule_violations(entry, ctx.language, no_break_before):
             yield _list_finding(f"line {entry.line}", ERROR, "hyphenation-list", entry.text,
-                                f"'{entry.text}': {problem}")
+                                f"'{entry.text}': {problem}{_in_text(entry.word, usage, text_words)}")
 
     # Unreviewed entries (no "*"): listed one by one only when there are few of them;
     # in a mostly generated list a single summary line is more useful.
-    unreviewed = [entry for entry in entries if not entry.locked]
+    unreviewed = [entry for entry in in_text if not entry.locked]
     if len(unreviewed) > MAX_LISTED_UNREVIEWED:
         yield _list_finding("summary", WARNING, "hyphenation-list", "unreviewed",
-                            f"{len(unreviewed)} of {len(entries)} entries are not checked by a person (no '*' at the start)")
+                            f"{len(unreviewed)} of {len(in_text)} entries of words of the text are not checked by a "
+                            f"person (no '*' at the start)")
     else:
         for entry in unreviewed:
             yield _list_finding(f"line {entry.line}", WARNING, "hyphenation-list", entry.text,
-                                f"'{entry.text}' is not checked by a person (no '*' at the start)")
+                                f"'{entry.text}' is not checked by a person (no '*' at the start)"
+                                f"{_in_text(entry.word, usage, text_words)}")
 
-    for issue in inconsistent_affixes(entries):
+    for issue in inconsistent_affixes(hyphenation.words):
+        if issue.entry.word.lower() not in text_words:
+            continue
         shown = f"{issue.affix}-" if issue.side == "prefix" else f"-{issue.affix}"
         yield _list_finding(
             f"line {issue.entry.line}", WARNING, "hyphenation-list", issue.entry.text,
             f"'{issue.entry.text}' breaks the {issue.side} '{shown}' as '{issue.actual}', but "
             f"{issue.majority_count} of {issue.group_count} words break it as '{issue.expected}' "
-            f"(for example {issue.example})")
+            f"(for example {issue.example}){_in_text(issue.entry.word, usage, text_words)}")
 
 
 def check_hyphenation(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
@@ -1125,24 +1181,31 @@ def _spelling_finding(severity: str, item: str, message: str) -> Finding:
                    message=message, context="")
 
 
+def _wordlist_problems(key: str, entry: SpellingEntry, ctx: CheckContext) -> Iterator[tuple[str, str]]:
+    """Problems of one Wordlist entry by itself: (severity, message)."""
+    for case in entry.specific_cases:
+        if case.lower() != key.lower():
+            yield WARNING, f"'{key}' is written '{case}' in {places.WORDLIST}, which has different letters"
+    if entry.state == STATE_RIGHT and entry.corrections:
+        yield WARNING, f"'{key}' is approved but has a correction '{', '.join(entry.corrections)}'"
+    for correction in entry.corrections:
+        target = ctx.spelling.lookup(correction)
+        if target and target.state == STATE_WRONG:
+            yield ERROR, f"the correction '{correction}' of '{key}' is also marked as wrong (W)"
+
+
 def check_lists(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
-    """Contradictions inside SpellingStatus.xml and between it, Settings.xml and hyphenatedWords.txt."""
+    """Contradictions inside SpellingStatus.xml and between it, Settings.xml and hyphenatedWords.txt.
+    Word entries are listed only for words of the text: the Wordlist window shows only those, so an entry of a word
+    that is not in the text cannot be found in Paratext (`unused` lists it). Measured 2026-11-25: 9 416 of 9 470."""
+    # A capitalized entry next to a small-letter entry ("Дивіться" W, "дивіться" R) is not listed here: the Wordlist
+    # window does not show it, so it cannot be changed in Paratext (`unused` lists it).
     entries = ctx.spelling.entries
+    text_words = _text_words(usage)
     for key, entry in sorted(entries.items()):
-        lowercase = entries.get(key.lower())
-        if key != key.lower() and lowercase and lowercase.state != entry.state:
-            yield _spelling_finding(WARNING, key, f"'{key}' is {entry.state} but '{lowercase.word}' is "
-                                                  f"{lowercase.state}")
-        for case in entry.specific_cases:
-            if case.lower() != key.lower():
-                yield _spelling_finding(WARNING, key, f"'{key}' is written '{case}' in {places.WORDLIST}, which has different letters")
-        if entry.state == STATE_RIGHT and entry.corrections:
-            yield _spelling_finding(WARNING, key, f"'{key}' is approved but has a correction "
-                                                  f"'{', '.join(entry.corrections)}'")
-        for correction in entry.corrections:
-            target = ctx.spelling.lookup(correction)
-            if target and target.state == STATE_WRONG:
-                yield _spelling_finding(ERROR, key, f"the correction '{correction}' of '{key}' is also marked as wrong (W)")
+        if key.lower() in text_words:
+            for severity, message in _wordlist_problems(key, entry, ctx):
+                yield _spelling_finding(severity, key, message + _in_text(key, usage, text_words))
         if entry.state == STATE_WRONG and key.lower() in ctx.book_title_words:
             yield _spelling_finding(WARNING, key, f"'{key}' is marked wrong (W), but it is a word of a book name "
                                                   f"(\\toc1-3): change the {places.WORDLIST} or the book name")
@@ -1155,13 +1218,13 @@ def check_lists(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
     if ctx.hyphenation:
         for entry in ctx.hyphenation.words:
             # An entry without letters ("-", which Publishing Assistant puts into every list) is not a word.
-            if not any(ch.isalpha() for ch in entry.word):
+            if not any(ch.isalpha() for ch in entry.word) or entry.word.lower() not in text_words:
                 continue
             spelling = ctx.spelling.lookup(entry.word)
             if spelling and spelling.state == STATE_WRONG:
                 yield _list_finding(f"line {entry.line}", WARNING, "lists", entry.text,
                                     f"'{entry.text}' is hyphenated, but '{spelling.word}' is marked wrong (W) in "
-                                    f"{places.WORDLIST}")
+                                    f"{places.WORDLIST}{_in_text(entry.word, usage, text_words)}")
 
 
 CHECKS: dict[str, Callable[[Analysis, CheckContext], Iterator[Finding]]] = {

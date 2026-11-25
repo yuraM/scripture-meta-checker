@@ -22,6 +22,10 @@ class LanguageProfile:
     no_break_before: frozenset[str] = frozenset()
     # Lowercase letters that stay with a preceding vowel when a consonant follows (Ukrainian "й": "вій=на").
     glides: frozenset[str] = frozenset()
+    # A glide may start a line when it starts a root after a prefix: the text before the break is one of
+    # glide_prefixes and the part after it starts with one of glide_roots (Ukrainian "ви=йти", "при=йми").
+    glide_prefixes: frozenset[str] = frozenset()
+    glide_roots: tuple[str, ...] = ()
 
 
 GENERIC = LanguageProfile(code="")
@@ -32,6 +36,13 @@ PROFILES: dict[str, LanguageProfile] = {
         vowels=frozenset("аеєиіїоуюя"),
         no_break_before=frozenset("ь"),
         glides=frozenset("й"),
+        # Ukrainian spelling rules 2019, § 63: point 4 keeps "й" with the letter before it ("бáй-ка", not "бá-йка"),
+        # point 5 keeps a consonant with its root ("до-зрівáти"). Roots of "йти" (go) and "йняти" (take) start with
+        # "й", so a break after the prefix is right: "ви=йти", "при=йми", "одно=йменний" (user decision 2026-11-25;
+        # 176 of 179 such findings in one project). "ви=ко=на=йте" (an ending) stays an error.
+        glide_prefixes=frozenset({"вві", "уві", "ви", "віді", "ді", "за", "зна", "зі", "на", "обі",
+                                  "пере", "піді", "при", "про", "розі", "одно"}),
+        glide_roots=("йт", "йд", "йш", "йм", "йн"),
     ),
 }
 

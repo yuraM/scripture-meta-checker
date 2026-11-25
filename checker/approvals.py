@@ -166,17 +166,21 @@ def _wordlist(ctx: CheckContext) -> Iterator[Finding]:
                        f"{', '.join(words[:EXAMPLES])})")
 
 
-def _hyphenation(ctx: CheckContext) -> Iterator[Finding]:
-    from checker.checks import HYPHENATION_FILE
+def _hyphenation(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]:
+    """Only words of the text: `unused` names the problems of the other entries (user decision 2026-11-25)."""
+    from checker.checks import HYPHENATION_FILE, _in_text, _text_words
 
     hyphenation = ctx.hyphenation
     if not hyphenation:
         return
+    text_words = _text_words(usage)
     no_break_before = ctx.settings.word_medial_punctuation - {hyphenation.hard_hyphen}
     for entry in hyphenation.words:
-        if entry.locked and (problems := list(rule_violations(entry, ctx.language, no_break_before))):
+        if entry.locked and entry.word.lower() in text_words \
+                and (problems := list(rule_violations(entry, ctx.language, no_break_before))):
             yield Finding(HYPHENATION_FILE, f"line {entry.line}", WARNING, CHECK, entry.text,
-                          f"'{entry.text}' is marked checked by a person (*), but: {problems[0]}", "")
+                          f"'{entry.text}' is marked checked by a person (*), but: {problems[0]}"
+                          f"{_in_text(entry.word, usage, text_words)}", "")
 
 
 def _all_approved(ctx: CheckContext) -> Iterator[Finding]:
@@ -197,5 +201,5 @@ def check_approvals(usage: UsageCounter, ctx: CheckContext) -> Iterator[Finding]
     yield from _punctuation(usage, ctx)
     yield from _rejected_but_used(usage, ctx)
     yield from _wordlist(ctx)
-    yield from _hyphenation(ctx)
+    yield from _hyphenation(usage, ctx)
 

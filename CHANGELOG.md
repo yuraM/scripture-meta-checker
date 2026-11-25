@@ -6,6 +6,17 @@ Changes of the Scripture checker by release. Releases: https://github.com/yuraM/
 
 ### What's new
 
+- **lists shows only what can be found in Paratext.** The Wordlist window shows only words of the text, one line
+  per word in small letters. So "is hyphenated, but … is marked wrong (W)" is now listed only for words of the text,
+  and "'Дивіться' is W but 'дивіться' is R" moved to unused ("'Дивіться' is in the list, but the Wordlist window
+  does not show it"). One project: 9 470 warnings -> 2.
+- **Unit 1 list checks show only words of the text, with a place.** hyphenation-list, approvals and lists name only
+  entries of words that are in a book, with the first place and the count: "(in the text: NUM 5:22, 65×)". Entries
+  of words that are in no book are in unused with their line and problem: "'вд=тоді' is in hyphenatedWords.txt, but
+  the word is not in any book of the project (also: part 'вд' has no vowel)".
+- **Ukrainian word breaks: 'ви=йти' is right.** "'й' must stay with the vowel before it" is no longer said when a
+  root that starts with 'й' follows a prefix ('ви=йти', 'при=йми'; Ukrainian spelling rules 2019, § 63, point 5).
+  'сла=йди' and 'ви=ко=на=йте' are still listed.
 - **A key is needed to open the window.** Get it at scripturechecker.org and type it when the program starts
   (the menu Key > Change key types another one). Testers (beta) and admins see all checks; other keys see the released
   checks. After each run the program sends the site the project name and language (from Settings.xml), the checked
